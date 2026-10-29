@@ -7,10 +7,18 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================
--- 1. ADMIN PROFILES TABLE
--- Only users with a row in this table have admin privileges.
--- Public sign-up is completely disabled.
+-- 1. PROFILES & ADMIN PROFILES TABLES
+-- Supports both profiles(role='admin') and admin_profiles tables.
 -- =============================================
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT UNIQUE,
+  email TEXT,
+  role TEXT NOT NULL DEFAULT 'user', -- 'admin' or 'user'
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS public.admin_profiles (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
@@ -119,6 +127,8 @@ CREATE TABLE IF NOT EXISTS public.settings (
 -- INDEXES
 -- =============================================
 CREATE INDEX IF NOT EXISTS idx_admin_profiles_username ON public.admin_profiles(username);
+CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON public.products(is_active);
 CREATE INDEX IF NOT EXISTS idx_products_featured ON public.products(is_featured, is_active);
@@ -130,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_sort ON public.categories(sort_order);
 
 -- =============================================
 -- SECURITY DEFINER ADMIN CHECK
--- Returns true ONLY if the current authenticated user has a row in admin_profiles
+-- Returns true if current authenticated user has an admin profile or profiles(role='admin')
 -- =============================================
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
@@ -139,9 +149,9 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  RETURN EXISTS (
-    SELECT 1 FROM public.admin_profiles
-    WHERE user_id = auth.uid()
+  RETURN (
+    EXISTS (SELECT 1 FROM public.admin_profiles WHERE user_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -221,6 +231,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- =============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =============================================
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
@@ -229,7 +240,13 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- 1. ADMIN_PROFILES: No public access; only authenticated admins can select
+-- 1. PROFILES & ADMIN_PROFILES: No public access; only authenticated users or admins
+DROP POLICY IF EXISTS "Admins can view and manage profiles" ON public.profiles;
+CREATE POLICY "Admins can view and manage profiles"
+  ON public.profiles FOR ALL
+  USING (public.is_admin() OR auth.uid() = id)
+  WITH CHECK (public.is_admin() OR auth.uid() = id);
+
 DROP POLICY IF EXISTS "Admins can view admin profiles" ON public.admin_profiles;
 CREATE POLICY "Admins can view admin profiles"
   ON public.admin_profiles FOR SELECT

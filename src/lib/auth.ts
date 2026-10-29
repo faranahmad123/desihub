@@ -17,20 +17,39 @@ export async function getCurrentAdminUser() {
     if (error || !user) return null;
 
     // Check admin_profiles table
-    const { data: adminProfile, error: profileError } = await supabase
+    const { data: adminProfile } = await supabase
       .from('admin_profiles')
       .select('user_id, username, created_at')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (profileError || !adminProfile) {
-      return null;
+    if (adminProfile) {
+      return {
+        user,
+        profile: adminProfile as AdminProfile,
+      };
     }
 
-    return {
-      user,
-      profile: adminProfile as AdminProfile,
-    };
+    // Also check profiles table with role = 'admin'
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, username, role')
+      .eq('id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+
+    if (profile) {
+      return {
+        user,
+        profile: {
+          user_id: user.id,
+          username: profile.username || user.email?.split('@')[0] || 'admin',
+          created_at: new Date().toISOString(),
+        } as AdminProfile,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }

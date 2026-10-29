@@ -1,93 +1,115 @@
 'use server';
 
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
-/**
- * Admin Login Server Action
- * Supports username OR email.
- * Applies a rate-limiting delay and returns a generic error message.
- */
-export async function adminLoginAction(data: {
+const GENERIC_ERROR = 'Incorrect username or password';
+
+// Only allow local admin pages, never the login page itself or another site
+function safeNext(next?: string): string {
+  if (
+    !next ||
+    !next.startsWith('/admin') ||
+    next.startsWith('//') ||
+    next.startsWith('/admin/login')
+  ) {
+    return '/admin';
+  }
+  return next;
+}
+
+export async function adminLoginAction(input: {
   login: string;
   password: string;
   next?: string;
-}) {
-  // Short anti-bruteforce delay
-  await new Promise((r) => setTimeout(r, 600));
-
-  const rawLogin = data.login ? data.login.trim() : '';
-  const password = data.password ? data.password.trim() : '';
-
-  if (!rawLogin || !password) {
-    return { error: 'Incorrect username or password' };
-  }
-
-  let emailToAuth = rawLogin;
-
-  // If login does NOT contain '@', it's a username
-  if (!rawLogin.includes('@')) {
-    try {
-      const adminClient = createAdminClient();
-      const { data: profile, error: profileErr } = await adminClient
-        .from('admin_profiles')
-        .select('user_id')
-        .eq('username', rawLogin)
-        .single();
-
-      if (profileErr || !profile) {
-        return { error: 'Incorrect username or password' };
-      }
-
-      // Look up auth email for this user_id
-      const { data: userData, error: userErr } =
-        await adminClient.auth.admin.getUserById(profile.user_id);
-
-      if (userErr || !userData?.user?.email) {
-        return { error: 'Incorrect username or password' };
-      }
-
-      emailToAuth = userData.user.email;
-    } catch {
-      return { error: 'Incorrect username or password' };
-    }
-  }
-
+}): Promise<{ error?: string; redirectUrl?: string }> {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: authData, error: authErr } =
-      await supabase.auth.signInWithPassword({
-        email: emailToAuth,
-        password,
+    const login = (input.login ?? '').trim();
+    const password = input.password ?? '';
+    if (!login || !password) return { error: GENERIC_ERROR };
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !anonKey || !serviceKey) {
+      console.error('[admin-login] Missing environment variable(s):', {
+        NEXT_PUBLIC_SUPABASE_URL: !!url,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: !!anonKey,
+        SUPABASE_SERVICE_ROLE_KEY: !!serviceKey,
       });
-
-    if (authErr || !authData?.user) {
-      return { error: 'Incorrect username or password' };
+      return { error: GENERIC_ERROR };
     }
 
-    // Verify user exists in admin_profiles
-    const { data: adminCheck } = await supabase
-      .from('admin_profiles')
-      .select('user_id')
-      .eq('user_id', authData.user.id)
-      .single();
+    // Server-only client with full access (never sent to the browser)
+    const admin = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
-    if (!adminCheck) {
+    // 1. Username -> email (an input containing "@" is used as the email)
+    let email = login;
+    if (!login.includes('@')) {
+      const { data, error } = await admin
+        .from('profiles')
+        .select('email')
+        .eq('username', login.toLowerCase())
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      if (error) console.error('[admin-login] username lookup failed:', error.message);
+      if (!data?.email) {
+        console.error('[admin-login] no admin found for that username');
+        return { error: GENERIC_ERROR };
+      }
+      email = data.email;
+    }
+
+    // 2. Sign in with a client that saves the session cookies
+    const cookieStore = await cookies();
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (list) => {
+          list.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        },
+      },
+    });
+
+    const { data: auth, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError || !auth.user) {
+      console.error('[admin-login] sign-in failed:', signInError?.message);
+      return { error: GENERIC_ERROR };
+    }
+
+    // 3. Must be an admin
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', auth.user.id)
+      .maybeSingle();
+
+    if (profileError) console.error('[admin-login] profile check failed:', profileError.message);
+
+    if (profile?.role !== 'admin') {
+      console.error('[admin-login] signed in, but this user is not an admin');
       await supabase.auth.signOut();
-      return { error: 'Incorrect username or password' };
+      return { error: GENERIC_ERROR };
     }
 
-    // Determine redirect
-    let redirectUrl = '/admin';
-    if (data.next && data.next.startsWith('/admin')) {
-      redirectUrl = data.next;
-    }
-
-    return { success: true, redirectUrl };
-  } catch {
-    return { error: 'Incorrect username or password' };
+    return { redirectUrl: safeNext(input.next) };
+  } catch (err) {
+    console.error('[admin-login] unexpected error:', err);
+    return { error: GENERIC_ERROR };
   }
 }
 

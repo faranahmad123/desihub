@@ -60,18 +60,28 @@ export async function updateSession(request: NextRequest) {
       user = currentUser;
 
       if (user) {
-        // Verify user exists in admin_profiles
+        // Verify user exists in admin_profiles or profiles (role = 'admin')
         const { data: adminProfile } = await supabase
           .from('admin_profiles')
           .select('user_id')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (adminProfile) {
           isAdminUser = true;
         } else {
-          // If a non-admin user is logged in, sign them out immediately
-          await supabase.auth.signOut();
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile?.role === 'admin') {
+            isAdminUser = true;
+          } else {
+            // If not an admin user, sign them out
+            await supabase.auth.signOut();
+          }
         }
       }
     } catch {
