@@ -8,6 +8,15 @@ import { requireAdmin } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 const GENERIC_ERROR = 'Incorrect username or password';
+// Debug mode turned ON per user request
+const DEBUG = process.env.ADMIN_LOGIN_DEBUG !== '0';
+
+function fail(code: string, detail?: string): { error: string } {
+  console.error('[admin-login]', code, detail ?? '');
+  return {
+    error: DEBUG ? `${GENERIC_ERROR} (${code}${detail ? ': ' + detail : ''})` : GENERIC_ERROR,
+  };
+}
 
 // Only allow local admin pages, never the login page itself or another site
 function safeNext(next?: string): string {
@@ -30,7 +39,7 @@ export async function adminLoginAction(input: {
   try {
     const login = (input.login ?? '').trim();
     const password = input.password ?? '';
-    if (!login || !password) return { error: GENERIC_ERROR };
+    if (!login || !password) return fail('EMPTY_FIELDS');
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey =
@@ -38,13 +47,13 @@ export async function adminLoginAction(input: {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!url || !anonKey || !serviceKey) {
-      console.error('[admin-login] Missing environment variable(s):', {
-        NEXT_PUBLIC_SUPABASE_URL: !!url,
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: !!anonKey,
-        SUPABASE_SERVICE_ROLE_KEY: !!serviceKey,
-      });
-      return { error: GENERIC_ERROR };
+    const missing = [
+      !url && 'NEXT_PUBLIC_SUPABASE_URL',
+      !anonKey && 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      !serviceKey && 'SUPABASE_SERVICE_ROLE_KEY',
+    ].filter(Boolean);
+    if (missing.length > 0 || !url || !anonKey || !serviceKey) {
+      return fail('ENV_MISSING', missing.join(', '));
     }
 
     // Server-only client with full access (never sent to the browser)
@@ -62,11 +71,8 @@ export async function adminLoginAction(input: {
         .eq('role', 'admin')
         .maybeSingle();
 
-      if (error) console.error('[admin-login] username lookup failed:', error.message);
-      if (!data?.email) {
-        console.error('[admin-login] no admin found for that username');
-        return { error: GENERIC_ERROR };
-      }
+      if (error) return fail('USERNAME_LOOKUP_ERROR', error.message);
+      if (!data?.email) return fail('USERNAME_NOT_FOUND');
       email = data.email;
     }
 
@@ -87,8 +93,7 @@ export async function adminLoginAction(input: {
     });
 
     if (signInError || !auth.user) {
-      console.error('[admin-login] sign-in failed:', signInError?.message);
-      return { error: GENERIC_ERROR };
+      return fail('SIGNIN_FAILED', signInError?.message);
     }
 
     // 3. Must be an admin
@@ -98,18 +103,16 @@ export async function adminLoginAction(input: {
       .eq('id', auth.user.id)
       .maybeSingle();
 
-    if (profileError) console.error('[admin-login] profile check failed:', profileError.message);
+    if (profileError) return fail('PROFILE_CHECK_ERROR', profileError.message);
 
     if (profile?.role !== 'admin') {
-      console.error('[admin-login] signed in, but this user is not an admin');
       await supabase.auth.signOut();
-      return { error: GENERIC_ERROR };
+      return fail('NOT_ADMIN', profile ? `role is ${profile.role}` : 'no profile row');
     }
 
     return { redirectUrl: safeNext(input.next) };
   } catch (err) {
-    console.error('[admin-login] unexpected error:', err);
-    return { error: GENERIC_ERROR };
+    return fail('UNEXPECTED', err instanceof Error ? err.message : String(err));
   }
 }
 
