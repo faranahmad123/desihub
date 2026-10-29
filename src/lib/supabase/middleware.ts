@@ -6,10 +6,16 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   const hasSupabase =
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-    !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('your-project') &&
-    !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('desi-hub-placeholder');
+    Boolean(supabaseUrl) &&
+    Boolean(supabaseKey) &&
+    !supabaseUrl?.includes('your-project') &&
+    !supabaseUrl?.includes('desi-hub-placeholder');
 
   let user = null;
   let isAdminUser = false;
@@ -17,8 +23,8 @@ export async function updateSession(request: NextRequest) {
   if (hasSupabase) {
     try {
       const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        supabaseUrl!,
+        supabaseKey!,
         {
           cookies: {
             getAll() {
