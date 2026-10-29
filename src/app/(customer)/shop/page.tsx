@@ -1,17 +1,43 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { FiSearch, FiFilter, FiX } from 'react-icons/fi';
+import { Search, X, ShoppingBag, Wheat, Droplet, Egg, Nut, Milk, Leaf, Flower2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useLanguageStore, translations } from '@/store/language';
 import ProductCard from '@/components/shop/ProductCard';
 import ProductSkeleton from '@/components/shop/ProductSkeleton';
 import type { Product, Category } from '@/lib/types';
+import { mockProducts, mockCategories } from '@/lib/mockData';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc';
 
-export default function ShopPage() {
+const getCategoryIcon = (slug: string, className = 'w-4 h-4') => {
+  switch (slug) {
+    case 'rice':
+    case 'chakki-atta':
+    case 'atta':
+      return <Wheat className={className} />;
+    case 'desi-ghee':
+    case 'ghee':
+      return <Milk className={className} />;
+    case 'zaitun-oil':
+    case 'oil':
+      return <Droplet className={className} />;
+    case 'desi-eggs':
+    case 'eggs':
+      return <Egg className={className} />;
+    case 'dry-fruit':
+      return <Nut className={className} />;
+    case 'pure-beri-honey':
+    case 'honey':
+      return <Flower2 className={className} />;
+    default:
+      return <Leaf className={className} />;
+  }
+};
+
+function ShopContent() {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get('category') || '';
   const initialSearch = searchParams.get('search') || '';
@@ -25,27 +51,43 @@ export default function ShopPage() {
   const { language } = useLanguageStore();
   const t = translations[language];
   const { t: translate } = useLanguageStore();
+  const isUrdu = language === 'ur';
 
   useEffect(() => {
     const supabase = createClient();
 
     async function fetchData() {
-      const [productsRes, categoriesRes] = await Promise.all([
-        supabase
-          .from('products')
-          .select('*, category:categories(*)')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('categories')
-          .select('*')
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true }),
-      ]);
+      try {
+        const [productsRes, categoriesRes] = await Promise.all([
+          supabase
+            .from('products')
+            .select('*, category:categories(*)')
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true }),
+          supabase
+            .from('categories')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true }),
+        ]);
 
-      if (productsRes.data) setProducts(productsRes.data);
-      if (categoriesRes.data) setCategories(categoriesRes.data);
-      setLoading(false);
+        if (productsRes.data && productsRes.data.length > 0) {
+          setProducts(productsRes.data);
+        } else {
+          setProducts(mockProducts);
+        }
+
+        if (categoriesRes.data && categoriesRes.data.length > 0) {
+          setCategories(categoriesRes.data);
+        } else {
+          setCategories(mockCategories);
+        }
+      } catch {
+        setProducts(mockProducts);
+        setCategories(mockCategories);
+      } finally {
+        setLoading(false);
+      }
     }
 
     fetchData();
@@ -55,7 +97,7 @@ export default function ShopPage() {
     let filtered = [...products];
 
     // Category filter
-    if (selectedCategory) {
+    if (selectedCategory && selectedCategory !== 'all') {
       filtered = filtered.filter(
         (p) => p.category && (p.category as Category).slug === selectedCategory
       );
@@ -90,44 +132,51 @@ export default function ShopPage() {
   }, [products, selectedCategory, searchQuery, sortBy]);
 
   return (
-    <div className="py-6">
+    <div className="py-6 sm:py-10">
       <div className="container-app">
-        {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold" style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-green)' }}>
-            {selectedCategory
+        {/* Header */}
+        <div className="mb-6 sm:mb-8">
+          <span className="text-xs font-bold uppercase tracking-widest text-[#c9a227]">
+            {isUrdu ? 'خالص اور قدرتی مصنوعات' : '100% Pure & Organic'}
+          </span>
+          <h1
+            className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#14532d] mt-1"
+            style={{ fontFamily: 'var(--font-heading)' }}
+          >
+            {selectedCategory && selectedCategory !== 'all'
               ? categories.find((c) => c.slug === selectedCategory)?.name || t.allProducts
               : t.allProducts}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {loading ? 'Loading...' : `${filteredProducts.length} products`}
+          <p className="text-xs sm:text-sm text-stone-600 mt-1">
+            {loading ? 'Loading catalog...' : `Showing ${filteredProducts.length} premium desi items`}
           </p>
         </div>
 
         {/* Search & Sort Bar */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
-            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t.search}
-              className="input-field pl-10"
+              className="w-full h-12 pl-11 pr-10 rounded-xl border border-stone-300 bg-white text-sm focus:border-[#14532d] focus:ring-2 focus:ring-[#14532d]/15 outline-none transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                aria-label="Clear search"
               >
-                <FiX size={18} />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="input-field sm:w-48"
+            className="h-12 px-4 rounded-xl border border-stone-300 bg-white text-sm font-medium text-stone-800 focus:border-[#14532d] focus:ring-2 focus:ring-[#14532d]/15 outline-none transition-all cursor-pointer sm:w-56"
           >
             <option value="newest">{t.newest}</option>
             <option value="price_asc">{t.priceLowHigh}</option>
@@ -135,42 +184,73 @@ export default function ShopPage() {
           </select>
         </div>
 
-        {/* Category Chips */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar mb-6 pb-1">
+        {/* Category Chips: one horizontally scrolling row with snap, no wrapping on mobile */}
+        <div className="flex gap-2 sm:gap-2.5 overflow-x-auto hide-scrollbar snap-x snap-mandatory flex-nowrap pb-4 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             onClick={() => setSelectedCategory('')}
-            className={`category-chip ${!selectedCategory ? 'active' : ''}`}
+            className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] ${
+              !selectedCategory || selectedCategory === 'all'
+                ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
+                : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
+            }`}
           >
-            {t.allCategories}
+            <Leaf className="w-4 h-4 text-emerald-600" />
+            <span>{t.allCategories}</span>
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.slug === selectedCategory ? '' : cat.slug)}
-              className={`category-chip ${cat.slug === selectedCategory ? 'active' : ''}`}
-            >
-              {translate(cat.name, cat.name_ur)}
-            </button>
-          ))}
+          {categories.map((cat) => {
+            const isActive = cat.slug === selectedCategory;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(isActive ? '' : cat.slug)}
+                className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] ${
+                  isActive
+                    ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
+                    : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
+                }`}
+              >
+                <span className={isActive ? 'text-[#fdf8ec]' : 'text-[#14532d]'}>
+                  {getCategoryIcon(cat.slug, 'w-4 h-4')}
+                </span>
+                <span>{translate(cat.name, cat.name_ur)}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Products Grid */}
+        {/* Products Grid: 2 cols on mobile, 3 on tablet, 4 on desktop */}
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
               <ProductSkeleton key={i} />
             ))}
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--color-cream-dark)' }}>
-              <span className="text-3xl">🔍</span>
+          <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl border border-stone-200/80 p-8">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-[#fdf8ec] border border-[#c9a227]/30 text-2xl">
+              <Search className="w-8 h-8 text-[#14532d]" />
             </div>
-            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-brown)' }}>No products found</h3>
-            <p className="text-sm text-gray-500">Try a different search or category</p>
+            <h3
+              className="text-lg sm:text-xl font-bold mb-2 text-[#14532d]"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              No products found
+            </h3>
+            <p className="text-xs sm:text-sm text-stone-600 mb-6 max-w-sm">
+              We couldn&apos;t find any products matching your search or category filter.
+            </p>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('');
+              }}
+              className="px-6 h-11 rounded-xl text-sm font-bold bg-[#14532d] text-[#fdf8ec] hover:bg-[#166534] transition-all"
+            >
+              Clear Filters
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
@@ -178,5 +258,26 @@ export default function ShopPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ShopPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-6 sm:py-10">
+          <div className="container-app">
+            <div className="h-10 bg-stone-200 animate-pulse w-48 mb-8 rounded-lg" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <ProductSkeleton key={i} />
+              ))}
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ShopContent />
+    </Suspense>
   );
 }

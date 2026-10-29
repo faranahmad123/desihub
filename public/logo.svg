@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" fill="none">
+  <!-- House Shield Outer Shadow / Glow -->
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c35c"/>
+      <stop offset="50%" stop-color="#c9a227"/>
+      <stop offset="100%" stop-color="#997510"/>
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#196336"/>
+      <stop offset="50%" stop-color="#14532d"/>
+      <stop offset="100%" stop-color="#0d3b1f"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- House Silhouette Body -->
+  <!-- Roof starts at top (70, 8), slopes down to (14, 52), vertical walls to (14, 126), bottom curve to (126, 126), right wall up to (126, 52), closing to (70, 8) -->
+  <path
+    d="M70 10 L16 52 C14 53.5 13 56 13 59 L13 120 C13 126.6 18.4 132 25 132 L115 132 C121.6 132 127 126.6 127 120 L127 59 C127 56 126 53.5 124 52 Z"
+    fill="url(#greenGrad)"
+    stroke="url(#goldGrad)"
+    stroke-width="5"
+    filter="url(#shadow)"
+  />
+
+  <!-- Inner Gold Ridge Line -->
+  <path
+    d="M70 24 L27 57 L27 120 C27 122 28.5 123.5 30.5 123.5 L109.5 123.5 C111.5 123.5 113 122 113 120 L113 57 Z"
+    fill="none"
+    stroke="url(#goldGrad)"
+    stroke-width="1.8"
+    opacity="0.6"
+  />
+
+  <!-- Top Roof Peak Leaf Accent -->
+  <path
+    d="M70 22 C64 30 64 38 70 44 C76 38 76 30 70 22 Z"
+    fill="url(#goldGrad)"
+  />
+
+  <!-- Monogram: D and H in bold Serif/Display Architecture -->
+  <!-- Letter 'D' -->
+  <g fill="url(#goldGrad)">
+    <!-- D vertical stem -->
+    <rect x="36" y="52" width="9" height="56" rx="2"/>
+    <!-- D serif top and bottom -->
+    <rect x="33" y="50" width="15" height="4" rx="1"/>
+    <rect x="33" y="106" width="15" height="4" rx="1"/>
+    <!-- D bowl -->
+    <path
+      d="M45 52 L54 52 C65 52 72 61 72 80 C72 99 65 108 54 108 L45 108 Z M45 60 L45 100 L53 100 C60 100 64 92 64 80 C64 68 60 60 53 60 Z"
+      fill-rule="evenodd"
+    />
+
+    <!-- Letter 'H' -->
+    <!-- H left stem -->
+    <rect x="73" y="52" width="9" height="56" rx="2"/>
+    <rect x="70" y="50" width="15" height="4" rx="1"/>
+    <rect x="70" y="106" width="15" height="4" rx="1"/>
+
+    <!-- H crossbar -->
+    <rect x="77" y="76" width="18" height="8" rx="1"/>
+
+    <!-- H right stem -->
+    <rect x="91" y="52" width="9" height="56" rx="2"/>
+    <rect x="88" y="50" width="15" height="4" rx="1"/>
+    <rect x="88" y="106" width="15" height="4" rx="1"/>
+  </g>
+</svg>

@@ -9,7 +9,7 @@ export default function WhatsAppButton() {
       href={`https://wa.me/${config.whatsappNumber}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-20 md:bottom-6 right-4 z-30 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110 animate-float"
+      className="fixed bottom-24 md:bottom-6 right-4 z-30 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110 active:scale-95 animate-float"
       style={{ background: '#25D366' }}
       aria-label="Chat on WhatsApp"
     >

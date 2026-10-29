@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Poppins, Noto_Naskh_Arabic } from "next/font/google";
 import "./globals.css";
 import config from "@/lib/config";
@@ -23,6 +23,13 @@ const notoNaskhArabic = Noto_Naskh_Arabic({
   display: "swap",
   weight: ["400", "500", "600", "700"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#14532d",
+};
 
 export const metadata: Metadata = {
   title: {
@@ -61,10 +68,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <meta name="theme-color" content="#14532d" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
       </head>
-      <body className="min-h-full flex flex-col" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      <body className="min-h-dvh flex flex-col" style={{ fontFamily: "'Poppins', sans-serif" }}>
         {children}
       </body>
     </html>

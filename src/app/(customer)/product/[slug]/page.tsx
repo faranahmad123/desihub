@@ -1,8 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { FiArrowLeft, FiMinus, FiPlus, FiShoppingCart, FiCheck } from 'react-icons/fi';
+import Link from 'next/link';
+import {
+  ArrowLeft,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Check,
+  Truck,
+  ShieldCheck,
+  Sparkles,
+  Leaf,
+} from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
 import { useCartStore } from '@/store/cart';
@@ -10,9 +21,10 @@ import { useLanguageStore, translations } from '@/store/language';
 import config from '@/lib/config';
 import { formatPrice } from '@/lib/utils';
 import type { Product } from '@/lib/types';
+import { mockProducts } from '@/lib/mockData';
 import toast from 'react-hot-toast';
 
-export default function ProductDetailPage() {
+function ProductDetailContent() {
   const params = useParams();
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
@@ -23,50 +35,71 @@ export default function ProductDetailPage() {
   const { language } = useLanguageStore();
   const t = translations[language];
   const { t: translate } = useLanguageStore();
+  const isUrdu = language === 'ur';
 
   useEffect(() => {
     const supabase = createClient();
     async function fetchProduct() {
-      const { data } = await supabase
-        .from('products')
-        .select('*, category:categories(*)')
-        .eq('slug', params.slug)
-        .eq('is_active', true)
-        .single();
-      setProduct(data);
-      setLoading(false);
+      try {
+        const { data } = await supabase
+          .from('products')
+          .select('*, category:categories(*)')
+          .eq('slug', params.slug)
+          .eq('is_active', true)
+          .single();
+        if (data) {
+          setProduct(data);
+        } else {
+          const fallback = mockProducts.find((p) => p.slug === params.slug) || null;
+          setProduct(fallback);
+        }
+      } catch {
+        const fallback = mockProducts.find((p) => p.slug === params.slug) || null;
+        setProduct(fallback);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchProduct();
   }, [params.slug]);
 
   const handleAdd = () => {
-    if (!product) return;
+    if (!product || !product.in_stock) return;
     for (let i = 0; i < qty; i++) addItem(product);
     setJustAdded(true);
-    toast.success(`${product.title} added to cart!`, {
+    toast.success(`${qty}× ${product.title} added to cart!`, {
       icon: '🛒',
-      style: { background: '#14532d', color: 'white', borderRadius: '12px', fontSize: '14px' },
+      style: {
+        background: '#14532d',
+        color: '#fdf8ec',
+        borderRadius: '14px',
+        fontSize: '14px',
+        fontWeight: '600',
+        padding: '12px 18px',
+      },
     });
-    setTimeout(() => setJustAdded(false), 1500);
+    setTimeout(() => setJustAdded(false), 1600);
   };
 
   const handleWhatsApp = () => {
     if (!product) return;
-    const msg = `Hi! I'd like to order:\n\n${product.title} x${qty}\nPrice: ${formatPrice(product.price * qty)}\n\nPlease confirm availability.`;
+    const msg = `Hi! I would like to order:\n\n*${product.title}*\nQuantity: ${qty}\nPrice: ${formatPrice(
+      product.price * qty
+    )}\nDelivery: Free Home Delivery (Islamabad & Rawalpindi)\n\nPlease confirm my order!`;
     window.open(`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   if (loading) {
     return (
-      <div className="container-app py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="aspect-square skeleton rounded-2xl" />
+      <div className="container-app py-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+          <div className="aspect-[4/3] bg-stone-200 animate-pulse rounded-2xl" />
           <div className="space-y-4">
-            <div className="h-8 skeleton w-3/4" />
-            <div className="h-5 skeleton w-1/4" />
-            <div className="h-10 skeleton w-1/3" />
-            <div className="h-20 skeleton w-full" />
-            <div className="h-12 skeleton w-full rounded-xl" />
+            <div className="h-6 bg-stone-200 animate-pulse w-1/4 rounded" />
+            <div className="h-10 bg-stone-200 animate-pulse w-3/4 rounded" />
+            <div className="h-8 bg-stone-200 animate-pulse w-1/3 rounded" />
+            <div className="h-24 bg-stone-200 animate-pulse w-full rounded" />
+            <div className="h-14 bg-stone-200 animate-pulse w-full rounded-xl" />
           </div>
         </div>
       </div>
@@ -75,36 +108,43 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="container-app py-16 text-center">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--color-cream-dark)' }}>
-          <span className="text-3xl">😕</span>
+      <div className="container-app py-20 text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-[#fdf8ec] border border-[#c9a227]/30 text-2xl">
+          🔍
         </div>
-        <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-green)' }}>
+        <h2
+          className="text-2xl font-bold mb-2 text-[#14532d]"
+          style={{ fontFamily: 'var(--font-heading)' }}
+        >
           Product Not Found
         </h2>
-        <p className="text-sm text-gray-500 mb-4">This product may have been removed or does not exist.</p>
-        <button onClick={() => router.push('/shop')} className="btn-primary">
+        <p className="text-sm text-stone-600 mb-6 max-w-sm mx-auto">
+          This product may have been removed or is temporarily unavailable.
+        </p>
+        <Link
+          href="/shop"
+          className="inline-flex items-center justify-center px-6 h-12 rounded-xl text-sm font-bold bg-[#14532d] text-[#fdf8ec] hover:bg-[#166534] transition-all"
+        >
           Back to Shop
-        </button>
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="container-app py-6">
+    <div className="container-app py-6 sm:py-8 pb-20">
       {/* Back button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm font-medium mb-6 hover:gap-3 transition-all"
-        style={{ color: 'var(--color-green)' }}
+        className="inline-flex items-center gap-2 text-sm font-bold mb-6 text-[#14532d] hover:text-[#166534] transition-colors"
       >
-        <FiArrowLeft size={18} />
-        Back
+        <ArrowLeft className="w-4 h-4" />
+        <span>{isUrdu ? 'واپس جائیں' : 'Back to Products'}</span>
       </button>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Image */}
-        <div className="aspect-square rounded-2xl overflow-hidden" style={{ background: 'var(--color-cream-dark)' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
+        {/* Product Image Box (4:3 ratio with clean fallback) */}
+        <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#fdf8ec] border border-stone-200/80 shadow-md">
           {product.image_url ? (
             <img
               src={product.image_url}
@@ -112,91 +152,205 @@ export default function ProductDetailPage() {
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <span className="text-7xl">🌿</span>
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-[#fdf8ec]">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-3 text-[#14532d]">
+                <Leaf className="w-8 h-8 text-[#14532d]" />
+              </div>
+              <span
+                className="text-base font-bold text-[#14532d]"
+                style={{ fontFamily: 'var(--font-heading)' }}
+              >
+                {product.title}
+              </span>
+              <span className="text-xs text-[#8a6810] font-semibold uppercase tracking-wider mt-1">
+                Pure • Natural • Healthy
+              </span>
+            </div>
+          )}
+
+          {/* Featured Ribbon */}
+          {product.is_featured && product.in_stock && (
+            <div className="absolute top-4 left-4 z-10">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#14532d] bg-[#f5e6b8] border border-[#c9a227]/40 shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-[#8a6810]" /> Featured Product
+              </span>
+            </div>
+          )}
+
+          {/* Out of Stock Overlay */}
+          {!product.in_stock && (
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-10">
+              <span className="px-4 py-2 rounded-full text-sm font-bold text-white bg-rose-600 shadow-md uppercase tracking-wider">
+                Out of Stock
+              </span>
             </div>
           )}
         </div>
 
-        {/* Details */}
-        <div>
-          {/* Category */}
-          {product.category && (
-            <span
-              className="inline-block px-3 py-1 rounded-full text-xs font-semibold mb-3"
-              style={{ background: 'var(--color-gold-light)', color: 'var(--color-green)' }}
-            >
-              {(product.category as any).name}
+        {/* Product Details */}
+        <div className="flex flex-col">
+          {/* Category & Weight Badges */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {product.category && (
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-[#14532d]">
+                {(product.category as any).name}
+              </span>
+            )}
+            <span className="inline-block px-3 py-1 rounded-md text-xs font-bold bg-[#fdf8ec] text-[#8a6810] border border-[#e6c35c]">
+              {product.unit}
             </span>
-          )}
+            <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold ml-auto">
+              <ShieldCheck className="w-4 h-4 text-emerald-700" /> 100% Guaranteed Pure
+            </span>
+          </div>
 
-          <h1 className="text-2xl md:text-3xl font-bold mb-1" style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-green)' }}>
+          {/* Title */}
+          <h1
+            className={`text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#14532d] mb-2 leading-tight ${
+              isUrdu ? 'urdu text-right' : ''
+            }`}
+            style={
+              isUrdu
+                ? { fontFamily: 'var(--font-urdu)', direction: 'rtl' }
+                : { fontFamily: 'var(--font-heading)' }
+            }
+          >
             {translate(product.title, product.title_ur)}
           </h1>
-          <p className="text-sm text-gray-500 mb-4">{product.unit}</p>
 
-          <p className="text-3xl font-bold mb-6" style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-green)' }}>
-            {formatPrice(product.price)}
-          </p>
+          {/* Price */}
+          <div className="flex items-baseline gap-2 mb-5">
+            <span
+              className="text-3xl sm:text-4xl font-extrabold text-[#14532d]"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              {formatPrice(product.price)}
+            </span>
+            <span className="text-sm font-semibold text-stone-500">PKR</span>
+          </div>
 
+          {/* Description */}
           {product.description && (
-            <div className="mb-6">
-              <p className="text-sm text-gray-600 leading-relaxed">
+            <div className="mb-6 pb-6 border-b border-stone-200">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-2">
+                Description & Benefits
+              </h2>
+              <p
+                className={`text-sm sm:text-base text-stone-700 leading-relaxed ${
+                  isUrdu ? 'urdu text-right' : ''
+                }`}
+                style={isUrdu ? { fontFamily: 'var(--font-urdu)', direction: 'rtl' } : {}}
+              >
                 {translate(product.description, product.description_ur)}
               </p>
             </div>
           )}
 
           {product.in_stock ? (
-            <>
-              {/* Quantity */}
-              <div className="flex items-center gap-4 mb-6">
-                <span className="text-sm font-medium text-gray-600">{t.quantity}:</span>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setQty(Math.max(1, qty - 1))} className="qty-btn">
-                    <FiMinus size={16} />
+            <div className="space-y-4">
+              {/* Quantity Stepper */}
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-bold text-stone-700">{t.quantity}:</span>
+                <div className="flex items-center gap-3 bg-stone-100 p-1 rounded-xl border border-stone-200">
+                  <button
+                    onClick={() => setQty(Math.max(1, qty - 1))}
+                    className="w-10 h-10 rounded-lg bg-white hover:bg-stone-200 flex items-center justify-center text-stone-700 transition-colors shadow-xs"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="w-4 h-4" />
                   </button>
-                  <span className="text-lg font-bold w-8 text-center">{qty}</span>
-                  <button onClick={() => setQty(qty + 1)} className="qty-btn">
-                    <FiPlus size={16} />
+                  <span className="text-base font-extrabold w-8 text-center text-stone-900">
+                    {qty}
+                  </span>
+                  <button
+                    onClick={() => setQty(qty + 1)}
+                    className="w-10 h-10 rounded-lg bg-white hover:bg-stone-200 flex items-center justify-center text-stone-700 transition-colors shadow-xs"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
+                <span className="text-xs text-stone-500 font-medium">
+                  Subtotal: <strong className="text-[#14532d]">{formatPrice(product.price * qty)}</strong>
+                </span>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button onClick={handleAdd} className="btn-primary flex-1 text-base py-4">
+              {/* Action Buttons (at least 48px height) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={handleAdd}
+                  className={`h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2.5 transition-all shadow-md active:scale-[0.98] cursor-pointer ${
+                    justAdded
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-[#14532d] hover:bg-[#166534] text-[#fdf8ec]'
+                  }`}
+                >
                   {justAdded ? (
-                    <><FiCheck size={20} /> Added to Cart!</>
+                    <>
+                      <Check className="w-5 h-5 animate-scale-in" />
+                      <span>Added to Cart!</span>
+                    </>
                   ) : (
-                    <><FiShoppingCart size={20} /> {t.addToCart}</>
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      <span>{t.addToCart}</span>
+                    </>
                   )}
                 </button>
-                <button onClick={handleWhatsApp} className="btn-whatsapp flex-1 text-base py-4">
-                  <FaWhatsapp size={20} />
-                  {t.buyOnWhatsApp}
+
+                <button
+                  onClick={handleWhatsApp}
+                  className="h-14 rounded-xl text-base font-bold bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center gap-2.5 shadow-md active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <FaWhatsapp size={22} />
+                  <span>{t.buyOnWhatsApp}</span>
                 </button>
               </div>
-            </>
+            </div>
           ) : (
-            <div className="p-4 rounded-xl bg-red-50 text-center">
-              <p className="text-red-600 font-semibold">{t.outOfStock}</p>
-              <p className="text-sm text-red-400 mt-1">This product is currently unavailable</p>
+            <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 text-center">
+              <p className="text-rose-700 font-bold">{t.outOfStock}</p>
+              <p className="text-xs text-rose-500 mt-1">
+                This product is currently out of stock. Contact us on WhatsApp for arrival estimates.
+              </p>
             </div>
           )}
 
-          {/* Delivery info */}
-          <div className="mt-6 p-4 rounded-xl flex items-center gap-3" style={{ background: 'var(--color-cream)' }}>
-            <span className="text-2xl">🚚</span>
+          {/* Delivery & Trust Highlights */}
+          <div className="mt-8 p-4 rounded-2xl bg-[#fdf8ec] border border-[#e6c35c]/50 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-white border border-[#c9a227]/30 flex items-center justify-center text-[#14532d] shrink-0">
+              <Truck className="w-6 h-6 text-[#14532d]" />
+            </div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--color-green)' }}>
-                {config.deliveryText}
+              <p className="text-sm font-bold text-[#14532d]">{config.deliveryText}</p>
+              <p className="text-xs text-stone-600 mt-0.5">
+                Cash on Delivery • Sourced fresh from trusted Punjab farms
               </p>
-              <p className="text-xs text-gray-500">Cash on Delivery available</p>
             </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container-app py-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="aspect-[4/3] bg-stone-200 animate-pulse rounded-2xl" />
+            <div className="space-y-4">
+              <div className="h-8 bg-stone-200 animate-pulse w-3/4 rounded" />
+              <div className="h-6 bg-stone-200 animate-pulse w-1/4 rounded" />
+              <div className="h-10 bg-stone-200 animate-pulse w-1/3 rounded" />
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ProductDetailContent />
+    </Suspense>
   );
 }

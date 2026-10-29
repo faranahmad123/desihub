@@ -16,6 +16,7 @@ const config = {
 
   // Delivery
   deliveryText: 'Free Home Delivery in Islamabad & Rawalpindi',
+  freeDeliveryThreshold: 0,
   deliveryCities: ['Islamabad', 'Rawalpindi'],
 
   // Social
