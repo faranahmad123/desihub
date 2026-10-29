@@ -17,6 +17,7 @@ export interface Product {
   description: string | null;
   description_ur: string | null;
   price: number;
+  original_price?: number | null;
   unit: string;
   category_id: string | null;
   image_url: string | null;
@@ -80,12 +81,8 @@ export interface CartItem {
   quantity: number;
 }
 
-export interface Profile {
-  id: string;
-  email: string;
-  full_name: string | null;
-  phone: string | null;
-  role: 'customer' | 'admin';
+export interface AdminProfile {
+  user_id: string;
+  username: string;
   created_at: string;
-  updated_at: string;
 }

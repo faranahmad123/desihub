@@ -18,8 +18,9 @@ import {
 import { useCartStore } from '@/store/cart';
 import { useLanguageStore, translations } from '@/store/language';
 import { createClient } from '@/lib/supabase/client';
+import { placeOrderAction } from './actions';
 import config from '@/lib/config';
-import { formatPrice, generateOrderNumber, getStallFromUrl } from '@/lib/utils';
+import { formatPrice, getStallFromUrl } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export default function CheckoutPage() {
@@ -80,59 +81,42 @@ export default function CheckoutPage() {
     if (items.length === 0) return;
 
     setLoading(true);
-    const supabase = createClient();
-    const orderNumber = generateOrderNumber();
     const stallSlug = getStallFromUrl();
 
     try {
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          order_number: orderNumber,
-          customer_name: form.name.trim(),
-          customer_phone: cleanPhone,
-          customer_city: form.city,
-          customer_address: form.address.trim(),
-          customer_notes: form.notes.trim() || null,
-          status: 'new',
-          payment_method: 'cod',
-          subtotal: total,
-          delivery_fee: 0,
-          total: total,
-          stall_slug: stallSlug,
-        })
-        .select()
-        .single();
+      const res = await placeOrderAction({
+        customer_name: form.name.trim(),
+        customer_phone: cleanPhone,
+        customer_city: form.city,
+        customer_address: form.address.trim(),
+        customer_notes: form.notes.trim() || null,
+        stall_slug: stallSlug,
+        items: items.map((i) => ({
+          product_id: i.product.id,
+          quantity: i.quantity,
+        })),
+      });
 
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = items.map((item) => ({
-        order_id: order.id,
-        product_id: item.product.id,
-        product_title: item.product.title,
-        product_price: item.product.price,
-        quantity: item.quantity,
-        line_total: item.product.price * item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-
-      if (itemsError) throw itemsError;
+      if (res.error || !res.orderNumber) {
+        toast.error(res.error || 'Failed to place order. Please try again.', {
+          style: { background: '#991b1b', color: 'white', borderRadius: '12px' },
+        });
+        setLoading(false);
+        return;
+      }
 
       // Clear cart and redirect
       clearCart();
       router.push(
-        `/order-success?order=${orderNumber}&name=${encodeURIComponent(
+        `/order-success?order=${res.orderNumber}&name=${encodeURIComponent(
           form.name
         )}&phone=${encodeURIComponent(cleanPhone)}&address=${encodeURIComponent(
           form.address
-        )}&city=${encodeURIComponent(form.city)}&total=${total}&items=${encodeURIComponent(
+        )}&city=${encodeURIComponent(form.city)}&total=${res.total}&items=${encodeURIComponent(
           JSON.stringify(items.map((i) => ({ t: i.product.title, q: i.quantity, p: i.product.price })))
         )}`
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Order error:', err);
       toast.error('Failed to place order. Please try again.', {
         style: { background: '#991b1b', color: 'white', borderRadius: '12px' },

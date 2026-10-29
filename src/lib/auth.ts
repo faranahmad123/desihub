@@ -1,8 +1,12 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
-import type { Profile } from '@/lib/types';
+import type { AdminProfile } from '@/lib/types';
 
-export async function getCurrentUser() {
+/**
+ * Validates the currently authenticated Supabase user and ensures
+ * they exist in the admin_profiles table.
+ * Returns null if not logged in or not an admin.
+ */
+export async function getCurrentAdminUser() {
   try {
     const supabase = await createServerSupabaseClient();
     const {
@@ -11,51 +15,47 @@ export async function getCurrentUser() {
     } = await supabase.auth.getUser();
 
     if (error || !user) return null;
-    return user;
-  } catch {
-    return null;
-  }
-}
 
-export async function getCurrentProfile(): Promise<Profile | null> {
-  try {
-    const user = await getCurrentUser();
-    if (!user) return null;
-
-    const supabase = await createServerSupabaseClient();
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
+    // Check admin_profiles table
+    const { data: adminProfile, error: profileError } = await supabase
+      .from('admin_profiles')
+      .select('user_id, username, created_at')
+      .eq('user_id', user.id)
       .single();
 
-    return profile || null;
+    if (profileError || !adminProfile) {
+      return null;
+    }
+
+    return {
+      user,
+      profile: adminProfile as AdminProfile,
+    };
   } catch {
     return null;
   }
 }
 
+/**
+ * Returns true if the current session belongs to a valid admin
+ */
 export async function isAdmin(): Promise<boolean> {
-  try {
-    // 1. Check local demo admin session cookie
-    const cookieStore = await cookies();
-    const demoAdminCookie = cookieStore.get('desi_hub_admin_session')?.value;
-    if (demoAdminCookie === 'authenticated') {
-      return true;
-    }
-
-    // 2. Check Supabase authenticated user & profile role
-    const profile = await getCurrentProfile();
-    return profile?.role === 'admin';
-  } catch {
-    return false;
-  }
+  const admin = await getCurrentAdminUser();
+  return admin !== null;
 }
 
-export async function requireAdmin(): Promise<{ authorized: boolean; reason?: string }> {
-  const authorized = await isAdmin();
-  if (!authorized) {
-    return { authorized: false, reason: 'Unauthorized: Admin privileges required' };
+/**
+ * Server-side guard for server actions & endpoints.
+ * Throws an error if not authorized.
+ */
+export async function requireAdmin(): Promise<{ authorized: true; userId: string; username: string }> {
+  const admin = await getCurrentAdminUser();
+  if (!admin) {
+    throw new Error('Unauthorized: Admin privileges required');
   }
-  return { authorized: true };
+  return {
+    authorized: true,
+    userId: admin.user.id,
+    username: admin.profile.username,
+  };
 }

@@ -1,23 +1,20 @@
 -- =============================================
 -- DESI HUB — Complete Supabase Database Schema
--- Run this script in the Supabase SQL Editor
+-- Safe to re-run in Supabase SQL Editor
 -- =============================================
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================
--- 1. PROFILES & ROLES TABLE
--- Extends Supabase auth.users with app-specific data & roles
+-- 1. ADMIN PROFILES TABLE
+-- Only users with a row in this table have admin privileges.
+-- Public sign-up is completely disabled.
 -- =============================================
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  full_name TEXT,
-  phone TEXT,
-  role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'admin')),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS public.admin_profiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- =============================================
@@ -59,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.products (
 );
 
 -- =============================================
--- 4. STALLS TABLE (Physical Stalls / QR Points)
+-- 4. STALLS TABLE (QR Tracking Points)
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.stalls (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -72,7 +69,7 @@ CREATE TABLE IF NOT EXISTS public.stalls (
 
 -- =============================================
 -- 5. ORDERS TABLE
--- Supports guest checkouts (user_id IS NULL) and user accounts
+-- Supports guest checkouts with server-computed totals
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -95,7 +92,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
 
 -- =============================================
 -- 6. ORDER ITEMS TABLE
--- Snapshot of product name & price at purchase time
+-- Snapshot of product title & price at time of purchase
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.order_items (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -109,7 +106,7 @@ CREATE TABLE IF NOT EXISTS public.order_items (
 );
 
 -- =============================================
--- 7. SETTINGS TABLE (Store Configurations)
+-- 7. SETTINGS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.settings (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -119,56 +116,37 @@ CREATE TABLE IF NOT EXISTS public.settings (
 );
 
 -- =============================================
--- INDEXES FOR FAST QUERYING
+-- INDEXES
 -- =============================================
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_admin_profiles_username ON public.admin_profiles(username);
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON public.products(is_active);
 CREATE INDEX IF NOT EXISTS idx_products_featured ON public.products(is_featured, is_active);
-CREATE INDEX IF NOT EXISTS idx_orders_user ON public.orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_stall ON public.orders(stall_slug);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON public.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_categories_sort ON public.categories(sort_order);
 
 -- =============================================
--- HELPER FUNCTIONS & TRIGGERS
+-- SECURITY DEFINER ADMIN CHECK
+-- Returns true ONLY if the current authenticated user has a row in admin_profiles
 -- =============================================
-
--- Security Definer function to check if the current user has 'admin' role
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
   RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
+    SELECT 1 FROM public.admin_profiles
+    WHERE user_id = auth.uid()
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Automatically create profile row when a new user registers in auth.users
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, full_name, phone, role)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-    COALESCE(NEW.raw_user_meta_data->>'phone', ''),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'customer')
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Trigger to auto-update 'updated_at' timestamp
+-- Trigger to auto-update 'updated_at'
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -176,10 +154,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_categories_updated_at ON public.categories;
 CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON public.categories
@@ -197,28 +171,57 @@ DROP TRIGGER IF EXISTS update_settings_updated_at ON public.settings;
 CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON public.settings
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- Function to generate human-readable order numbers: DH-YYYYMMDD-0001
-CREATE OR REPLACE FUNCTION public.generate_order_number()
-RETURNS TEXT AS $$
+-- =============================================
+-- ORDER TRACKING RPC (Minimal data exposure)
+-- Takes order number and customer phone, returns safe tracking payload only
+-- =============================================
+CREATE OR REPLACE FUNCTION public.track_order(p_order_number TEXT, p_customer_phone TEXT)
+RETURNS JSONB AS $$
 DECLARE
-  new_number TEXT;
-  today_count INTEGER;
+  v_order RECORD;
+  v_items JSONB;
+  v_clean_phone TEXT;
 BEGIN
-  SELECT COUNT(*) + 1 INTO today_count
+  -- Strip spaces and hyphens for resilient matching
+  v_clean_phone := REGEXP_REPLACE(TRIM(p_customer_phone), '[\s\-]', '', 'g');
+
+  SELECT id, order_number, status, total, delivery_fee, created_at
+  INTO v_order
   FROM public.orders
-  WHERE DATE(created_at) = CURRENT_DATE;
-  
-  new_number := 'DH-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(today_count::TEXT, 4, '0');
-  RETURN new_number;
+  WHERE UPPER(order_number) = UPPER(TRIM(p_order_number))
+    AND REGEXP_REPLACE(customer_phone, '[\s\-]', '', 'g') = v_clean_phone;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'product_title', product_title,
+      'product_price', product_price,
+      'quantity', quantity,
+      'line_total', line_total
+    )
+  ), '[]'::jsonb)
+  INTO v_items
+  FROM public.order_items
+  WHERE order_id = v_order.id;
+
+  RETURN jsonb_build_object(
+    'order_number', v_order.order_number,
+    'status', v_order.status,
+    'total', v_order.total,
+    'delivery_fee', v_order.delivery_fee,
+    'created_at', v_order.created_at,
+    'items', v_items
+  );
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =============================================
-
--- Enable RLS on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stalls ENABLE ROW LEVEL SECURITY;
@@ -226,19 +229,19 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- 1. PROFILES POLICIES
-DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-CREATE POLICY "Users can view own profile"
-  ON public.profiles FOR SELECT
-  USING (auth.uid() = id OR public.is_admin());
+-- 1. ADMIN_PROFILES: No public access; only authenticated admins can select
+DROP POLICY IF EXISTS "Admins can view admin profiles" ON public.admin_profiles;
+CREATE POLICY "Admins can view admin profiles"
+  ON public.admin_profiles FOR SELECT
+  USING (public.is_admin());
 
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-CREATE POLICY "Users can update own profile"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Admins can manage admin profiles" ON public.admin_profiles;
+CREATE POLICY "Admins can manage admin profiles"
+  ON public.admin_profiles FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
--- 2. CATEGORIES POLICIES
+-- 2. CATEGORIES: Public can SELECT active rows; Admins can do everything
 DROP POLICY IF EXISTS "Public can view active categories" ON public.categories;
 CREATE POLICY "Public can view active categories"
   ON public.categories FOR SELECT
@@ -250,7 +253,7 @@ CREATE POLICY "Admins can manage categories"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 3. PRODUCTS POLICIES
+-- 3. PRODUCTS: Public can SELECT active rows; Admins can do everything
 DROP POLICY IF EXISTS "Public can view active products" ON public.products;
 CREATE POLICY "Public can view active products"
   ON public.products FOR SELECT
@@ -262,7 +265,7 @@ CREATE POLICY "Admins can manage products"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 4. STALLS POLICIES
+-- 4. STALLS: Public can SELECT active stalls; Admins can do everything
 DROP POLICY IF EXISTS "Public can view active stalls" ON public.stalls;
 CREATE POLICY "Public can view active stalls"
   ON public.stalls FOR SELECT
@@ -274,46 +277,23 @@ CREATE POLICY "Admins can manage stalls"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 5. ORDERS POLICIES
--- Anyone (guest or customer) can place an order
-DROP POLICY IF EXISTS "Anyone can place order" ON public.orders;
-CREATE POLICY "Anyone can place order"
-  ON public.orders FOR INSERT
-  WITH CHECK (true);
-
--- Customers can view their own orders; public can view order if tracking with matching order_number & phone; admins see all
-DROP POLICY IF EXISTS "Users or admins can view orders" ON public.orders;
-CREATE POLICY "Users or admins can view orders"
-  ON public.orders FOR SELECT
-  USING (
-    (auth.uid() IS NOT NULL AND auth.uid() = user_id)
-    OR public.is_admin()
-    OR true -- Allowed for direct lookup in client using .eq('order_number', ...).eq('customer_phone', ...)
-  );
-
--- Admins can update order status
-DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
-CREATE POLICY "Admins can update orders"
-  ON public.orders FOR UPDATE
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
--- 6. ORDER ITEMS POLICIES
-DROP POLICY IF EXISTS "Anyone can create order items" ON public.order_items;
-CREATE POLICY "Anyone can create order items"
-  ON public.order_items FOR INSERT
-  WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Users and admins can view order items" ON public.order_items;
-CREATE POLICY "Users and admins can view order items"
-  ON public.order_items FOR SELECT
-  USING (true);
-
--- 7. SETTINGS POLICIES
-DROP POLICY IF EXISTS "Public can view settings" ON public.settings;
-CREATE POLICY "Public can view settings"
+-- 5. SETTINGS: Public reads non-sensitive keys only; Admins do everything
+DROP POLICY IF EXISTS "Public can view non-sensitive settings" ON public.settings;
+CREATE POLICY "Public can view non-sensitive settings"
   ON public.settings FOR SELECT
-  USING (true);
+  USING (
+    public.is_admin()
+    OR key IN (
+      'store_name',
+      'brand_name',
+      'whatsapp_number',
+      'delivery_message',
+      'banner_text',
+      'hero_headline',
+      'hero_subheadline',
+      'currency'
+    )
+  );
 
 DROP POLICY IF EXISTS "Admins can manage settings" ON public.settings;
 CREATE POLICY "Admins can manage settings"
@@ -321,12 +301,46 @@ CREATE POLICY "Admins can manage settings"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
+-- 6. ORDERS: Anonymous visitors can INSERT only (checkout); cannot SELECT, UPDATE, DELETE. Admins can SELECT and UPDATE.
+DROP POLICY IF EXISTS "Anonymous can insert orders" ON public.orders;
+CREATE POLICY "Anonymous can insert orders"
+  ON public.orders FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can select orders" ON public.orders;
+CREATE POLICY "Admins can select orders"
+  ON public.orders FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
+CREATE POLICY "Admins can update orders"
+  ON public.orders FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- 7. ORDER ITEMS: Anonymous can INSERT only; cannot SELECT directly (must use track_order RPC); Admins can SELECT
+DROP POLICY IF EXISTS "Anonymous can insert order items" ON public.order_items;
+CREATE POLICY "Anonymous can insert order items"
+  ON public.order_items FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can select order items" ON public.order_items;
+CREATE POLICY "Admins can select order items"
+  ON public.order_items FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can manage order items" ON public.order_items;
+CREATE POLICY "Admins can manage order items"
+  ON public.order_items FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 -- =============================================
--- STORAGE BUCKET: product-images
+-- STORAGE BUCKET & POLICIES
 -- =============================================
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('product-images', 'product-images', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 DROP POLICY IF EXISTS "Public can view product images" ON storage.objects;
 CREATE POLICY "Public can view product images"
@@ -336,21 +350,20 @@ CREATE POLICY "Public can view product images"
 DROP POLICY IF EXISTS "Admins can upload product images" ON storage.objects;
 CREATE POLICY "Admins can upload product images"
   ON storage.objects FOR INSERT
-  WITH CHECK (bucket_id = 'product-images' AND (public.is_admin() OR auth.role() = 'authenticated'));
+  WITH CHECK (bucket_id = 'product-images' AND public.is_admin());
 
 DROP POLICY IF EXISTS "Admins can update product images" ON storage.objects;
 CREATE POLICY "Admins can update product images"
   ON storage.objects FOR UPDATE
-  USING (bucket_id = 'product-images' AND (public.is_admin() OR auth.role() = 'authenticated'));
+  USING (bucket_id = 'product-images' AND public.is_admin());
 
 DROP POLICY IF EXISTS "Admins can delete product images" ON storage.objects;
 CREATE POLICY "Admins can delete product images"
   ON storage.objects FOR DELETE
-  USING (bucket_id = 'product-images' AND (public.is_admin() OR auth.role() = 'authenticated'));
+  USING (bucket_id = 'product-images' AND public.is_admin());
 
 -- =============================================
--- OPTIONAL REALTIME NOTIFICATIONS
--- Allows Admin Dashboard to listen to new orders instantly
+-- REALTIME PUBLICATION FOR ORDERS
 -- =============================================
 DO $$
 BEGIN

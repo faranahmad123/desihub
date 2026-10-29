@@ -3,12 +3,11 @@
 import { useEffect, useState } from 'react';
 import { FiPlus, FiEdit2, FiTrash2, FiTag, FiX, FiCheck } from 'react-icons/fi';
 import { createClient } from '@/lib/supabase/client';
-import { mockCategories } from '@/lib/mockData';
 import type { Category } from '@/lib/types';
 import toast from 'react-hot-toast';
 
 export default function AdminCategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -31,9 +30,9 @@ export default function AdminCategoriesPage() {
           .select('*')
           .order('sort_order', { ascending: true });
 
-        if (data && data.length > 0) setCategories(data);
+        if (data) setCategories(data);
       } catch (err) {
-        console.warn('Categories fallback:', err);
+        console.warn('Categories error:', err);
       } finally {
         setLoading(false);
       }

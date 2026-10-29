@@ -14,15 +14,14 @@ import {
   FiShoppingBag,
 } from 'react-icons/fi';
 import { createClient } from '@/lib/supabase/client';
-import { mockStalls, mockOrders } from '@/lib/mockData';
 import { formatPrice } from '@/lib/utils';
 import config from '@/lib/config';
 import type { Stall, Order } from '@/lib/types';
 import toast from 'react-hot-toast';
 
 export default function AdminStallsPage() {
-  const [stalls, setStalls] = useState<Stall[]>(mockStalls);
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [stalls, setStalls] = useState<Stall[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [qrCodes, setQrCodes] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,10 +47,10 @@ export default function AdminStallsPage() {
           supabase.from('orders').select('*'),
         ]);
 
-        if (stallsRes.data && stallsRes.data.length > 0) setStalls(stallsRes.data);
-        if (ordersRes.data && ordersRes.data.length > 0) setOrders(ordersRes.data);
+        if (stallsRes.data) setStalls(stallsRes.data);
+        if (ordersRes.data) setOrders(ordersRes.data);
       } catch (err) {
-        console.warn('Stalls fallback:', err);
+        console.warn('Stalls error:', err);
       } finally {
         setLoading(false);
       }

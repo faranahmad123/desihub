@@ -21,7 +21,6 @@ import { useLanguageStore, translations } from '@/store/language';
 import config from '@/lib/config';
 import { formatPrice } from '@/lib/utils';
 import type { Product } from '@/lib/types';
-import { mockProducts } from '@/lib/mockData';
 import toast from 'react-hot-toast';
 
 function ProductDetailContent() {
@@ -47,15 +46,9 @@ function ProductDetailContent() {
           .eq('slug', params.slug)
           .eq('is_active', true)
           .single();
-        if (data) {
-          setProduct(data);
-        } else {
-          const fallback = mockProducts.find((p) => p.slug === params.slug) || null;
-          setProduct(fallback);
-        }
+        setProduct(data || null);
       } catch {
-        const fallback = mockProducts.find((p) => p.slug === params.slug) || null;
-        setProduct(fallback);
+        setProduct(null);
       } finally {
         setLoading(false);
       }

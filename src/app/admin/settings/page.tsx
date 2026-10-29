@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FiSave, FiCheckCircle, FiShield, FiPhone, FiTruck, FiGlobe, FiInfo } from 'react-icons/fi';
 import { FaWhatsapp, FaFacebook, FaInstagram, FaTiktok } from 'react-icons/fa';
+import { createClient } from '@/lib/supabase/client';
 import config from '@/lib/config';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<Record<string, string>>({
     brandName: config.brandName,
     tagline: config.tagline,
     taglineSecondary: config.taglineSecondary,
@@ -27,21 +28,63 @@ export default function AdminSettingsPage() {
 
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const supabase = createClient();
+    async function loadSettings() {
+      try {
+        const { data } = await supabase.from('settings').select('*');
+        if (data && data.length > 0) {
+          const loaded: Record<string, string> = {};
+          data.forEach((row) => {
+            loaded[row.key] = row.value || '';
+          });
+          setSettings((prev) => ({
+            ...prev,
+            ...(loaded.brand_name ? { brandName: loaded.brand_name } : {}),
+            ...(loaded.whatsapp_number ? { whatsappNumber: loaded.whatsapp_number } : {}),
+            ...(loaded.delivery_message ? { deliveryText: loaded.delivery_message } : {}),
+            ...(loaded.hero_headline ? { heroHeadline: loaded.hero_headline } : {}),
+            ...(loaded.hero_subheadline ? { heroSubHeadline: loaded.hero_subheadline } : {}),
+          }));
+        }
+      } catch (e) {
+        console.warn('Settings load error:', e);
+      }
+    }
+    loadSettings();
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setSettings({ ...settings, [e.target.name]: e.target.value });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
-    setTimeout(() => {
-      setSaving(false);
-      toast.success('Brand settings saved successfully!', {
+    try {
+      const supabase = createClient();
+      const rows = [
+        { key: 'brand_name', value: settings.brandName || '' },
+        { key: 'whatsapp_number', value: settings.whatsappNumber || '' },
+        { key: 'delivery_message', value: settings.deliveryText || '' },
+        { key: 'hero_headline', value: settings.heroHeadline || '' },
+        { key: 'hero_subheadline', value: settings.heroSubHeadline || '' },
+      ];
+
+      for (const row of rows) {
+        await supabase.from('settings').upsert(row as any, { onConflict: 'key' });
+      }
+
+      toast.success('Brand settings saved to database!', {
         icon: '🌿',
         style: { background: '#14532d', color: 'white', borderRadius: '12px' },
       });
-    }, 500);
+    } catch {
+      toast.error('Failed to save settings to database');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

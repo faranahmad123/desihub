@@ -27,7 +27,6 @@ import { useLanguageStore, translations } from '@/store/language';
 import ProductCard from '@/components/shop/ProductCard';
 import ProductSkeleton from '@/components/shop/ProductSkeleton';
 import type { Product, Category } from '@/lib/types';
-import { mockProducts, mockCategories } from '@/lib/mockData';
 import { formatPrice } from '@/lib/utils';
 
 // Lucide Icon mapping for categories
@@ -85,20 +84,11 @@ export default function HomePage() {
             .order('sort_order', { ascending: true }),
         ]);
 
-        if (productsRes.data && productsRes.data.length > 0) {
-          setFeaturedProducts(productsRes.data);
-        } else {
-          setFeaturedProducts(mockProducts.filter((p) => p.is_featured));
-        }
-
-        if (categoriesRes.data && categoriesRes.data.length > 0) {
-          setCategories(categoriesRes.data);
-        } else {
-          setCategories(mockCategories);
-        }
+        setFeaturedProducts(productsRes.data || []);
+        setCategories(categoriesRes.data || []);
       } catch {
-        setFeaturedProducts(mockProducts.filter((p) => p.is_featured));
-        setCategories(mockCategories);
+        setFeaturedProducts([]);
+        setCategories([]);
       } finally {
         setLoading(false);
       }

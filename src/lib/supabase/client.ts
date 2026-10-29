@@ -1,31 +1,27 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-// Retrieve the environment variables safely
+// Retrieve environment variables safely
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-// Check for both the modern publishable key and the legacy anon key
 const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   '';
 
-// Force a console error if they are missing so we can see it in the browser
 if (!supabaseUrl) {
-  console.error('Supabase URL is missing! Check Vercel NEXT_PUBLIC_SUPABASE_URL environment variable.');
+  console.error('Supabase URL is missing! Check NEXT_PUBLIC_SUPABASE_URL.');
 }
 if (!supabaseKey) {
-  console.error('Supabase Key is missing! Check Vercel NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY environment variable.');
+  console.error('Supabase Key is missing! Check NEXT_PUBLIC_SUPABASE_ANON_KEY.');
 }
 
-// Fallback to placeholder to prevent top-level module crash if env vars are missing during build
 const clientUrl = supabaseUrl || 'https://desi-hub-placeholder.supabase.co';
 const clientKey = supabaseKey || 'placeholder-key';
 
-// Initialize and export the client
-export const supabase = createSupabaseClient(clientUrl, clientKey);
+// Cookie-based client for browser hydration & session persistence
+export const supabase = createBrowserClient(clientUrl, clientKey);
 
-// Compatibility helper for pages importing createClient()
 export function createClient() {
-  return supabase;
+  return createBrowserClient(clientUrl, clientKey);
 }
 
 export default supabase;

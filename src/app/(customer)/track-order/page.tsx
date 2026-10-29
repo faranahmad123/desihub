@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Package, MapPin, Clock, CheckCircle } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { Package, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { trackOrderAction, type TrackOrderResult } from './actions';
 import { useLanguageStore, translations } from '@/store/language';
 import config from '@/lib/config';
 import { formatPrice } from '@/lib/utils';
-import type { Order, OrderItem } from '@/lib/types';
-import { mockOrders } from '@/lib/mockData';
+import toast from 'react-hot-toast';
 
 export default function TrackOrderPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [phone, setPhone] = useState('');
-  const [order, setOrder] = useState<(Order & { order_items: OrderItem[] }) | null>(null);
+  const [order, setOrder] = useState<TrackOrderResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const { language } = useLanguageStore();
@@ -25,33 +24,16 @@ export default function TrackOrderPage() {
     setSearched(true);
 
     try {
-      const supabase = createClient();
-      const cleanPhone = phone.replace(/[\s-]/g, '').trim();
-      const { data } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .eq('order_number', orderNumber.trim().toUpperCase())
-        .eq('customer_phone', cleanPhone)
-        .single();
-
-      if (data) {
-        setOrder(data);
+      const res = await trackOrderAction(orderNumber, phone);
+      if (res.error) {
+        toast.error(res.error);
+        setOrder(null);
       } else {
-        const found = mockOrders.find(
-          (o) =>
-            o.order_number.toUpperCase() === orderNumber.trim().toUpperCase() &&
-            (o.customer_phone.replace(/[\s-]/g, '') === cleanPhone || !cleanPhone)
-        );
-        setOrder((found as any) || null);
+        setOrder(res.order);
       }
     } catch {
-      const cleanPhone = phone.replace(/[\s-]/g, '').trim();
-      const found = mockOrders.find(
-        (o) =>
-          o.order_number.toUpperCase() === orderNumber.trim().toUpperCase() &&
-          (o.customer_phone.replace(/[\s-]/g, '') === cleanPhone || !cleanPhone)
-      );
-      setOrder((found as any) || null);
+      toast.error('Unable to track order right now. Please try again.');
+      setOrder(null);
     } finally {
       setLoading(false);
     }
@@ -82,7 +64,10 @@ export default function TrackOrderPage() {
         </div>
 
         {/* Search Form */}
-        <form onSubmit={handleTrack} className="bg-white rounded-2xl p-5 sm:p-7 border border-stone-200/80 shadow-xs mb-6 sm:mb-8 space-y-4">
+        <form
+          onSubmit={handleTrack}
+          className="bg-white rounded-2xl p-5 sm:p-7 border border-stone-200/80 shadow-xs mb-6 sm:mb-8 space-y-4"
+        >
           <div>
             <label className="block text-sm font-semibold mb-1.5 text-stone-800">
               {t.orderNumber}
@@ -102,7 +87,6 @@ export default function TrackOrderPage() {
             </label>
             <input
               type="tel"
-              inputMode="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="w-full h-12 px-4 rounded-xl border border-stone-300 bg-stone-50/50 focus:bg-white focus:border-[#14532d] focus:ring-2 focus:ring-[#14532d]/15 text-sm outline-none transition-all"
@@ -113,39 +97,28 @@ export default function TrackOrderPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 rounded-xl text-sm font-bold bg-[#14532d] hover:bg-[#166534] text-[#fdf8ec] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+            className="w-full h-12 rounded-xl text-sm font-bold bg-[#14532d] text-[#fdf8ec] hover:bg-[#166534] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-950/15 disabled:opacity-50"
           >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Searching...
-              </span>
-            ) : (
-              <>
-                <Search className="w-4 h-4" /> {t.track}
-              </>
-            )}
+            {loading ? 'Searching...' : t.trackOrder}
           </button>
         </form>
 
         {/* Results */}
-        {searched && !loading && !order && (
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-stone-200/80 shadow-xs text-center">
-            <div className="w-14 h-14 rounded-full bg-[#fdf8ec] border border-[#c9a227]/30 flex items-center justify-center mx-auto mb-3 text-2xl text-[#14532d]">
-              <Search className="w-6 h-6" />
+        {searched && !order && !loading && (
+          <div className="bg-white rounded-2xl p-8 border border-stone-200/80 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="w-6 h-6" />
             </div>
-            <h3 className="text-base sm:text-lg font-bold mb-1 text-stone-800">
-              {t.noOrderFound}
-            </h3>
-            <p className="text-xs sm:text-sm text-stone-500 max-w-xs mx-auto">
-              Please double check your order number and phone number, or contact us on WhatsApp.
+            <h3 className="text-base font-bold text-stone-800 mb-1">Order Not Found</h3>
+            <p className="text-xs sm:text-sm text-stone-500 max-w-sm mx-auto">
+              Please double check your order number and phone number and try again.
             </p>
           </div>
         )}
 
         {order && (
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200/80 shadow-xs animate-fade-in space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+          <div className="bg-white rounded-2xl p-5 sm:p-7 border border-stone-200/80 shadow-md space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
               <div>
                 <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider">{t.orderNumber}</p>
                 <p className="text-lg sm:text-xl font-extrabold text-[#14532d]" style={{ fontFamily: 'var(--font-heading)' }}>
@@ -153,7 +126,7 @@ export default function TrackOrderPage() {
                 </p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold status-${order.status}`}>
-                {config.orderStatusLabels[order.status]}
+                {config.orderStatusLabels[order.status] || order.status}
               </span>
             </div>
 
@@ -173,7 +146,7 @@ export default function TrackOrderPage() {
                         {i <= currentStepIndex ? <CheckCircle className="w-3.5 h-3.5" /> : i + 1}
                       </div>
                       <span className="text-[9px] sm:text-[10px] text-center font-medium text-stone-600 max-w-[65px] leading-tight">
-                        {config.orderStatusLabels[step as keyof typeof config.orderStatusLabels]}
+                        {config.orderStatusLabels[step as keyof typeof config.orderStatusLabels] || step}
                       </span>
                     </div>
                   ))}
@@ -193,9 +166,9 @@ export default function TrackOrderPage() {
             <div>
               <h3 className="text-sm font-bold text-stone-800 mb-2">Order Items:</h3>
               <div className="space-y-2">
-                {order.order_items?.map((item: OrderItem) => (
+                {order.items?.map((item, idx) => (
                   <div
-                    key={item.id}
+                    key={idx}
                     className="flex justify-between items-center text-xs sm:text-sm p-3 rounded-xl bg-stone-50 border border-stone-100"
                   >
                     <span className="text-stone-700">
@@ -214,13 +187,12 @@ export default function TrackOrderPage() {
               </span>
             </div>
 
-            {/* Delivery address & date */}
-            <div className="text-xs text-stone-500 pt-2 border-t border-stone-100 flex flex-col sm:flex-row justify-between gap-2">
+            {/* Placed date */}
+            <div className="text-xs text-stone-500 pt-2 border-t border-stone-100 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#14532d]" /> {order.customer_city} ({order.customer_address})
+                <Clock className="w-3.5 h-3.5 text-[#14532d]" /> Placed on
               </span>
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#14532d]" />
+              <span>
                 {new Date(order.created_at).toLocaleDateString('en-PK', {
                   month: 'short',
                   day: 'numeric',

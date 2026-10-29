@@ -8,7 +8,6 @@ import { useLanguageStore, translations } from '@/store/language';
 import ProductCard from '@/components/shop/ProductCard';
 import ProductSkeleton from '@/components/shop/ProductSkeleton';
 import type { Product, Category } from '@/lib/types';
-import { mockProducts, mockCategories } from '@/lib/mockData';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc';
 
@@ -71,20 +70,11 @@ function ShopContent() {
             .order('sort_order', { ascending: true }),
         ]);
 
-        if (productsRes.data && productsRes.data.length > 0) {
-          setProducts(productsRes.data);
-        } else {
-          setProducts(mockProducts);
-        }
-
-        if (categoriesRes.data && categoriesRes.data.length > 0) {
-          setCategories(categoriesRes.data);
-        } else {
-          setCategories(mockCategories);
-        }
+        setProducts(productsRes.data || []);
+        setCategories(categoriesRes.data || []);
       } catch {
-        setProducts(mockProducts);
-        setCategories(mockCategories);
+        setProducts([]);
+        setCategories([]);
       } finally {
         setLoading(false);
       }
