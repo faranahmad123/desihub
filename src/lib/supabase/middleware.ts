@@ -8,9 +8,11 @@ export async function updateSession(request: NextRequest) {
 
   const hasSupabase =
     Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-    !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('your-project');
+    !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('your-project') &&
+    !process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('desi-hub-placeholder');
 
   let user = null;
+  let isAdminUser = false;
 
   if (hasSupabase) {
     try {
@@ -39,6 +41,19 @@ export async function updateSession(request: NextRequest) {
 
       const { data } = await supabase.auth.getUser();
       user = data.user;
+
+      if (user) {
+        // Check profile role from Supabase
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.role === 'admin') {
+          isAdminUser = true;
+        }
+      }
     } catch {
       // Fallback if network or Supabase connection issue
     }
@@ -46,11 +61,12 @@ export async function updateSession(request: NextRequest) {
 
   // Check demo admin session cookie as well
   const adminCookie = request.cookies.get('desi_hub_admin_session')?.value;
-  const isAuthenticated = Boolean(user || adminCookie === 'authenticated');
+  const isAuthorizedAdmin = isAdminUser || adminCookie === 'authenticated';
 
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith('/admin') && !request.nextUrl.pathname.startsWith('/admin/login')) {
-    if (!isAuthenticated) {
+  // Protect admin routes (all /admin except /admin/login)
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+    if (!isAuthorizedAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = '/admin/login';
       return NextResponse.redirect(url);

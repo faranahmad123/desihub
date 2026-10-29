@@ -79,3 +79,13 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
+
+export interface Profile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  role: 'customer' | 'admin';
+  created_at: string;
+  updated_at: string;
+}
