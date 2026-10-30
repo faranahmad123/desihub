@@ -199,6 +199,27 @@ export async function updateOrderStatusAction(
 }
 
 /**
+ * Delete Order Server Action
+ * Securely deletes an order by ID (with cascade cleanup on order_items).
+ */
+export async function deleteOrderAction(orderId: string) {
+  await requireAdmin();
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('orders')
+    .delete()
+    .eq('id', orderId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/admin/orders');
+  return { success: true };
+}
+
+/**
  * Get New Orders Count Server Action (for Navigation badge)
  */
 export async function getNewOrdersCountAction(): Promise<number> {

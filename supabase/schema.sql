@@ -345,6 +345,11 @@ CREATE POLICY "Admins can update orders"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Admins can delete orders" ON public.orders;
+CREATE POLICY "Admins can delete orders"
+  ON public.orders FOR DELETE
+  USING (public.is_admin());
+
 -- 7. ORDER ITEMS: Anonymous can INSERT only; cannot SELECT directly (must use track_order RPC); Admins can SELECT
 DROP POLICY IF EXISTS "Anonymous can insert order items" ON public.order_items;
 CREATE POLICY "Anonymous can insert order items"

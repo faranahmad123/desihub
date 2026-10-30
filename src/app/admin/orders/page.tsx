@@ -17,8 +17,9 @@ import {
   FiShoppingBag,
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
+import { Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { updateOrderStatusAction } from '../actions';
+import { updateOrderStatusAction, deleteOrderAction } from '../actions';
 import { formatPrice } from '@/lib/utils';
 import type { Order, OrderItem } from '@/lib/types';
 import toast, { Toaster } from 'react-hot-toast';
@@ -35,6 +36,8 @@ function OrdersContent() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus>('all');
   const [selectedStall, setSelectedStall] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -84,6 +87,44 @@ function OrdersContent() {
       toast.success(`Order marked as ${newStatus.replace(/_/g, ' ')}`);
     } catch {
       toast.error('Failed to update status');
+    }
+  };
+
+  // Delete order with client Supabase call + Server Action fallback for cache revalidation
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    const orderId = orderToDelete.id;
+    const orderNumber = orderToDelete.order_number;
+    setDeleting(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('orders').delete().eq('id', orderId);
+
+      if (error) {
+        // Fallback to server action if client RLS requires server credentials
+        const res = await deleteOrderAction(orderId);
+        if (res?.error) {
+          toast.error(res.error || 'Failed to delete order');
+          return;
+        }
+      }
+
+      // Immediate state update
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(null);
+      }
+
+      setOrderToDelete(null);
+      toast.success(`Order #${orderNumber} deleted successfully!`, {
+        icon: '🗑️',
+        style: { background: '#14532d', color: '#fff', borderRadius: '12px' },
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete order');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -330,6 +371,14 @@ function OrdersContent() {
                     >
                       <FiEye size={15} />
                     </button>
+                    <button
+                      onClick={() => setOrderToDelete(order)}
+                      className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors"
+                      title="Delete Order"
+                      aria-label="Delete Order"
+                    >
+                      <Trash2 size={15} className="text-red-600" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -437,6 +486,14 @@ function OrdersContent() {
                           >
                             <FiEye size={15} />
                           </button>
+                          <button
+                            onClick={() => setOrderToDelete(order)}
+                            className="p-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Delete Order"
+                            aria-label="Delete Order"
+                          >
+                            <Trash2 size={15} className="text-red-600" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -533,6 +590,53 @@ function OrdersContent() {
               >
                 <FaWhatsapp size={16} /> WhatsApp
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= DELETE CONFIRMATION MODAL ================= */}
+      {orderToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Order #{orderToDelete.order_number}?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Customer: {orderToDelete.customer_name}</p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed bg-red-50/70 p-3.5 rounded-xl border border-red-100 text-red-800">
+              Are you sure you want to delete this order? All associated order items will be permanently removed. This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={deleting}
+                className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {deleting ? (
+                  'Deleting...'
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
