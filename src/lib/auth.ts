@@ -3,7 +3,7 @@ import type { AdminProfile } from '@/lib/types';
 
 /**
  * Validates the currently authenticated Supabase user and ensures
- * they exist in the admin_profiles table.
+ * they have the 'admin' role in public.profiles.
  * Returns null if not logged in or not an admin.
  */
 export async function getCurrentAdminUser() {
@@ -16,40 +16,26 @@ export async function getCurrentAdminUser() {
 
     if (error || !user) return null;
 
-    // Check admin_profiles table
-    const { data: adminProfile } = await supabase
-      .from('admin_profiles')
-      .select('user_id, username, created_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (adminProfile) {
-      return {
-        user,
-        profile: adminProfile as AdminProfile,
-      };
-    }
-
-    // Also check profiles table with role = 'admin'
-    const { data: profile } = await supabase
+    // Check public.profiles table where role = 'admin'
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, username, role')
+      .select('id, username, email, role, created_at')
       .eq('id', user.id)
       .eq('role', 'admin')
       .maybeSingle();
 
-    if (profile) {
-      return {
-        user,
-        profile: {
-          user_id: user.id,
-          username: profile.username || user.email?.split('@')[0] || 'admin',
-          created_at: new Date().toISOString(),
-        } as AdminProfile,
-      };
+    if (profileError || !profile) {
+      return null;
     }
 
-    return null;
+    return {
+      user,
+      profile: {
+        user_id: user.id,
+        username: profile.username || user.email?.split('@')[0] || 'admin',
+        created_at: profile.created_at || new Date().toISOString(),
+      } as AdminProfile,
+    };
   } catch {
     return null;
   }

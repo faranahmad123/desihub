@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FiLock, FiUser, FiArrowRight, FiShield, FiArrowLeft, FiEye, FiEyeOff } from 'react-icons/fi';
-import { adminLoginAction } from '../actions';
+import { adminLoginAction } from '../login-action';
 import config from '@/lib/config';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -43,7 +43,8 @@ function LoginForm() {
       toast.success('Signed in successfully!');
       router.push(res.redirectUrl || '/admin');
       router.refresh();
-    } catch {
+    } catch (err) {
+      console.error('[admin-login] Form submit error:', err);
       setErrorMessage('Incorrect username or password');
       setLoading(false);
     }
@@ -114,6 +115,7 @@ function LoginForm() {
                 <input
                   type="text"
                   required
+                  autoComplete="username"
                   autoCapitalize="none"
                   autoCorrect="off"
                   value={login}
@@ -133,6 +135,7 @@ function LoginForm() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -158,21 +161,21 @@ function LoginForm() {
                 'Signing in...'
               ) : (
                 <>
-                  Sign In to Dashboard
-                  <FiArrowRight size={16} />
+                  <span>Sign In</span>
+                  <FiArrowRight />
                 </>
               )}
             </button>
           </form>
 
-          {/* Return link */}
-          <div className="mt-8 pt-4 border-t border-gray-100 text-center">
+          {/* Quick storefront link */}
+          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-green-800 transition-colors"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-green-800 transition-colors"
             >
               <FiArrowLeft size={14} />
-              Return to Customer Store
+              <span>Back to Storefront</span>
             </Link>
           </div>
         </div>
@@ -185,8 +188,8 @@ export default function AdminLoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#14532d] text-white">
-          Loading...
+        <div className="min-h-screen flex items-center justify-center bg-stone-900 text-white font-medium text-sm">
+          Loading Admin Portal...
         </div>
       }
     >

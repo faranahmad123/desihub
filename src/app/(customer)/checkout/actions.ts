@@ -1,7 +1,6 @@
 'use server';
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { generateOrderNumber } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 
 export interface PlaceOrderInput {
@@ -12,7 +11,7 @@ export interface PlaceOrderInput {
   customer_notes?: string | null;
   stall_slug?: string | null;
   items: {
-    product_id: string;
+    product_id: string; // Must be product's UUID
     quantity: number;
   }[];
 }
@@ -44,108 +43,45 @@ export async function placeOrderAction(input: PlaceOrderInput) {
     }
   }
 
-  const supabase = await createServerSupabaseClient();
-
-  // 2. Fetch authoritative prices from products table on the server
-  const productIds = input.items.map((i) => i.product_id);
-  const { data: dbProducts, error: prodErr } = await supabase
-    .from('products')
-    .select('id, title, price, in_stock, is_active')
-    .in('id', productIds);
-
-  if (prodErr || !dbProducts || dbProducts.length === 0) {
-    return { error: 'One or more items in your cart could not be verified.' };
-  }
-
-  const productMap = new Map(dbProducts.map((p) => [p.id, p]));
-
-  let subtotal = 0;
-  const verifiedOrderItems: {
-    product_id: string;
-    product_title: string;
-    product_price: number;
-    quantity: number;
-    line_total: number;
-  }[] = [];
-
-  for (const item of input.items) {
-    const prod = productMap.get(item.product_id);
-    if (!prod) {
-      return { error: `Product not found or unavailable.` };
-    }
-    if (!prod.is_active || !prod.in_stock) {
-      return { error: `"${prod.title}" is currently out of stock.` };
-    }
-
-    const price = Number(prod.price);
-    const lineTotal = price * item.quantity;
-    subtotal += lineTotal;
-
-    verifiedOrderItems.push({
-      product_id: prod.id,
-      product_title: prod.title,
-      product_price: price,
-      quantity: item.quantity,
-      line_total: lineTotal,
-    });
-  }
-
-  const deliveryFee = 0; // Free delivery configured for Islamabad/Rawalpindi
-  const total = subtotal + deliveryFee;
-  const orderNumber = generateOrderNumber();
-
-  // 3. Insert order
   try {
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        order_number: orderNumber,
-        customer_name: name,
-        customer_phone: cleanPhone,
-        customer_city: input.customer_city || 'Islamabad',
-        customer_address: address,
-        customer_notes: input.customer_notes ? input.customer_notes.trim() : null,
-        status: 'new',
-        payment_method: 'cod',
-        subtotal: subtotal,
-        delivery_fee: deliveryFee,
-        total: total,
-        stall_slug: input.stall_slug || null,
-      })
-      .select('id, order_number')
-      .single();
+    const supabase = await createServerSupabaseClient();
 
-    if (orderError || !order) {
-      console.error('Order insert error:', orderError);
+    // Call place_order RPC to calculate authoritative prices server-side
+    // and write order + order_items safely within a single transaction
+    const { data, error } = await supabase.rpc('place_order', {
+      p_name: name,
+      p_phone: cleanPhone,
+      p_city: input.customer_city || 'Islamabad',
+      p_address: address,
+      p_notes: input.customer_notes ? input.customer_notes.trim() : null,
+      p_items: input.items.map((i) => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+      })),
+      p_stall_slug: input.stall_slug || null,
+    });
+
+    if (error) {
+      console.error('place_order RPC error:', error);
+      return { error: error.message || 'Failed to place order. Please try again.' };
+    }
+
+    if (!data) {
       return { error: 'Failed to create order. Please try again.' };
     }
 
-    // 4. Insert order items
-    const itemsPayload = verifiedOrderItems.map((item) => ({
-      order_id: order.id,
-      product_id: item.product_id,
-      product_title: item.product_title,
-      product_price: item.product_price,
-      quantity: item.quantity,
-      line_total: item.line_total,
-    }));
-
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(itemsPayload);
-
-    if (itemsError) {
-      console.error('Order items insert error:', itemsError);
-    }
+    // data contains { order_number, total }
+    const result = data as { order_number: string; total: number; id?: string };
 
     revalidatePath('/admin/orders');
 
     return {
       success: true,
-      orderNumber: order.order_number,
-      total: total,
+      orderNumber: result.order_number,
+      total: Number(result.total),
     };
   } catch (err: any) {
+    console.error('place_order unexpected error:', err);
     return { error: err.message || 'An unexpected error occurred while placing your order.' };
   }
 }

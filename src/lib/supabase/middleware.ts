@@ -1,6 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { SUPABASE_URL, SUPABASE_PUBLIC_KEY } from '@/lib/supabase/env';
 
+/**
+ * Robust session refresh and admin route protection middleware.
+ * Uses supabase.auth.getUser() to validate the JWT with Supabase Auth servers.
+ */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -9,42 +14,24 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAdminRoute = pathname.startsWith('/admin');
 
-  // Add noindex header to all /admin pages
-  if (isAdminRoute) {
-    supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  const hasSupabase =
-    Boolean(supabaseUrl) &&
-    Boolean(supabaseKey) &&
-    !supabaseUrl?.includes('your-project') &&
-    !supabaseUrl?.includes('desi-hub-placeholder');
-
   let user = null;
   let isAdminUser = false;
 
-  if (hasSupabase) {
+  const url = SUPABASE_URL;
+  const anonKey = SUPABASE_PUBLIC_KEY;
+
+  if (url && anonKey) {
     try {
-      const supabase = createServerClient(supabaseUrl!, supabaseKey!, {
+      const supabase = createServerClient(url, anonKey, {
         cookies: {
           getAll() {
             return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
-            );
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
             supabaseResponse = NextResponse.next({
               request,
             });
-            if (isAdminRoute) {
-              supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
-            }
             cookiesToSet.forEach(({ name, value, options }) =>
               supabaseResponse.cookies.set(name, value, options)
             );
@@ -60,28 +47,18 @@ export async function updateSession(request: NextRequest) {
       user = currentUser;
 
       if (user) {
-        // Verify user exists in admin_profiles or profiles (role = 'admin')
-        const { data: adminProfile } = await supabase
-          .from('admin_profiles')
-          .select('user_id')
-          .eq('user_id', user.id)
+        // Verify user exists in public.profiles with role = 'admin'
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
           .maybeSingle();
 
-        if (adminProfile) {
+        if (profile?.role === 'admin') {
           isAdminUser = true;
         } else {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (profile?.role === 'admin') {
-            isAdminUser = true;
-          } else {
-            // If not an admin user, sign them out
-            await supabase.auth.signOut();
-          }
+          // If not an admin user, sign them out immediately
+          await supabase.auth.signOut();
         }
       }
     } catch {
@@ -99,6 +76,7 @@ export async function updateSession(request: NextRequest) {
       redirectResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
       return redirectResponse;
     }
+    supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
     return supabaseResponse;
   }
 
@@ -107,12 +85,22 @@ export async function updateSession(request: NextRequest) {
     if (!isAdminUser) {
       const url = request.nextUrl.clone();
       url.pathname = '/admin/login';
-      const nextPath = pathname + request.nextUrl.search;
-      url.searchParams.set('next', nextPath);
+      const rawNext = pathname + request.nextUrl.search;
+      // Sanitize next: prevent redirect loop to /admin/login or open redirects
+      const nextParam =
+        rawNext.startsWith('/admin') && !rawNext.startsWith('/admin/login') && !rawNext.startsWith('//')
+          ? rawNext
+          : '/admin';
+      url.search = `?next=${encodeURIComponent(nextParam)}`;
+
       const redirectResponse = NextResponse.redirect(url);
       redirectResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
       return redirectResponse;
     }
+
+    // Authenticated admin accessing an admin route
+    supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    return supabaseResponse;
   }
 
   return supabaseResponse;
