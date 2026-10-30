@@ -1,15 +1,83 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FiPhone, FiMapPin, FiMail, FiArrowRight } from 'react-icons/fi';
 import { FaFacebookF, FaInstagram, FaTiktok, FaWhatsapp } from 'react-icons/fa';
+import { createClient } from '@/lib/supabase/client';
 import config from '@/lib/config';
 import { useLanguageStore, translations } from '@/store/language';
 import Logo from '@/components/ui/Logo';
 
+interface StoreInfo {
+  brandName: string;
+  taglineUrdu: string;
+  taglineSecondary: string;
+  phone: string;
+  whatsappNumber: string;
+  whatsappDisplay: string;
+  email: string;
+  facebook: string;
+  instagram: string;
+  tiktok: string;
+  deliveryMessage: string;
+}
+
 export default function Footer() {
   const { language } = useLanguageStore();
   const t = translations[language];
+
+  // Dynamic state initialized with config defaults, updated from Supabase settings
+  const [storeInfo, setStoreInfo] = useState<StoreInfo>({
+    brandName: config.brandName,
+    taglineUrdu: config.taglineUrdu,
+    taglineSecondary: config.taglineSecondary,
+    phone: config.phone,
+    whatsappNumber: config.whatsappNumber,
+    whatsappDisplay: config.whatsappDisplay,
+    email: config.email,
+    facebook: config.social.facebook,
+    instagram: config.social.instagram,
+    tiktok: config.social.tiktok,
+    deliveryMessage: config.deliveryText,
+  });
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function fetchSettings() {
+      try {
+        const { data, error } = await supabase.from('settings').select('key, value');
+        if (error || !data || data.length === 0) return;
+
+        const map: Record<string, string> = {};
+        data.forEach((row) => {
+          if (row.key && row.value) {
+            map[row.key] = row.value;
+          }
+        });
+
+        setStoreInfo((prev) => ({
+          ...prev,
+          brandName: map.brand_name || prev.brandName,
+          taglineUrdu: map.tagline_urdu || prev.taglineUrdu,
+          taglineSecondary: map.tagline_secondary || prev.taglineSecondary,
+          phone: map.phone || prev.phone,
+          whatsappNumber: map.whatsapp_number || prev.whatsappNumber,
+          whatsappDisplay: map.whatsapp_display || map.whatsapp_number || prev.whatsappDisplay,
+          email: map.email || prev.email,
+          facebook: map.facebook || prev.facebook,
+          instagram: map.instagram || prev.instagram,
+          tiktok: map.tiktok || prev.tiktok,
+          deliveryMessage: map.delivery_message || prev.deliveryMessage,
+        }));
+      } catch (err) {
+        console.warn('Failed to load store settings in Footer:', err);
+      }
+    }
+
+    fetchSettings();
+  }, []);
 
   return (
     <footer className="on-dark text-[#fdf8ec] mt-auto bg-[#14532d] border-t-4 border-[#c9a227]">
@@ -20,7 +88,7 @@ export default function Footer() {
             <Logo variant="light" size="md" showTagline={true} />
 
             <p className="text-[#f5edd5] text-sm leading-relaxed max-w-sm pt-2">
-              Natural Food, Better Life. Providing 100% pure, natural, and fresh desi products straight to your home.
+              {storeInfo.taglineSecondary}. Providing 100% pure, natural, and fresh desi products straight to your home.
             </p>
 
             {/* Urdu Tagline */}
@@ -28,7 +96,7 @@ export default function Footer() {
               className="text-[#e8c547] text-base font-semibold urdu pt-1"
               style={{ fontFamily: 'var(--font-urdu)', direction: 'rtl' }}
             >
-              {config.taglineUrdu}
+              {storeInfo.taglineUrdu}
             </p>
           </div>
 
@@ -72,7 +140,7 @@ export default function Footer() {
             </h4>
             <div className="flex flex-col gap-3 text-sm">
               <a
-                href={`tel:${config.phone}`}
+                href={`tel:${storeInfo.phone}`}
                 className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
               >
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
@@ -80,12 +148,12 @@ export default function Footer() {
                 </div>
                 <div>
                   <span className="text-[10px] text-stone-300 block uppercase">Phone Support</span>
-                  <span className="font-semibold font-mono text-[#fdf8ec]">{config.whatsappDisplay}</span>
+                  <span className="font-semibold font-mono text-[#fdf8ec]">{storeInfo.whatsappDisplay || storeInfo.phone}</span>
                 </div>
               </a>
 
               <a
-                href={`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I want to order from DESI HUB.')}`}
+                href={`https://wa.me/${storeInfo.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I want to order from DESI HUB.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
@@ -95,7 +163,7 @@ export default function Footer() {
                 </div>
                 <div>
                   <span className="text-[10px] text-stone-300 block uppercase">WhatsApp Orders</span>
-                  <span className="font-semibold font-mono text-[#fdf8ec]">{config.whatsappDisplay}</span>
+                  <span className="font-semibold font-mono text-[#fdf8ec]">{storeInfo.whatsappDisplay || storeInfo.whatsappNumber}</span>
                 </div>
               </a>
 
@@ -110,7 +178,7 @@ export default function Footer() {
               </div>
 
               <a
-                href={`mailto:${config.email}`}
+                href={`mailto:${storeInfo.email}`}
                 className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
               >
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
@@ -118,7 +186,7 @@ export default function Footer() {
                 </div>
                 <div>
                   <span className="text-[10px] text-stone-300 block uppercase">Email</span>
-                  <span className="font-mono text-xs text-[#fdf8ec]">{config.email}</span>
+                  <span className="font-mono text-xs text-[#fdf8ec]">{storeInfo.email}</span>
                 </div>
               </a>
             </div>
@@ -139,7 +207,7 @@ export default function Footer() {
 
             <div className="flex gap-2.5">
               <a
-                href={config.social.facebook}
+                href={storeInfo.facebook}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
@@ -148,7 +216,7 @@ export default function Footer() {
                 <FaFacebookF size={16} />
               </a>
               <a
-                href={config.social.instagram}
+                href={storeInfo.instagram}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
@@ -157,7 +225,7 @@ export default function Footer() {
                 <FaInstagram size={16} />
               </a>
               <a
-                href={config.social.tiktok}
+                href={storeInfo.tiktok}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
@@ -171,7 +239,7 @@ export default function Footer() {
 
         {/* Bottom Credits & Copyright */}
         <div className="border-t border-emerald-800/80 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#f5edd5] text-center sm:text-left">
-          <p>© 2025 {config.brandName}. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {storeInfo.brandName}. All rights reserved.</p>
 
           <p className="flex items-center gap-1.5 font-medium">
             <span>Powered by</span>

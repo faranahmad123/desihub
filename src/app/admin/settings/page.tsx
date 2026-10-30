@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { FiSave, FiCheckCircle, FiShield, FiPhone, FiTruck, FiGlobe, FiInfo } from 'react-icons/fi';
 import { FaWhatsapp, FaFacebook, FaInstagram, FaTiktok } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
+import { saveSettingsAction } from '../actions';
 import config from '@/lib/config';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -41,10 +42,20 @@ export default function AdminSettingsPage() {
           setSettings((prev) => ({
             ...prev,
             ...(loaded.brand_name ? { brandName: loaded.brand_name } : {}),
+            ...(loaded.tagline ? { tagline: loaded.tagline } : {}),
+            ...(loaded.tagline_secondary ? { taglineSecondary: loaded.tagline_secondary } : {}),
+            ...(loaded.tagline_urdu ? { taglineUrdu: loaded.tagline_urdu } : {}),
             ...(loaded.whatsapp_number ? { whatsappNumber: loaded.whatsapp_number } : {}),
+            ...(loaded.whatsapp_display ? { whatsappDisplay: loaded.whatsapp_display } : {}),
+            ...(loaded.phone ? { phone: loaded.phone } : {}),
+            ...(loaded.email ? { email: loaded.email } : {}),
             ...(loaded.delivery_message ? { deliveryText: loaded.delivery_message } : {}),
+            ...(loaded.free_delivery_threshold ? { freeDeliveryThreshold: loaded.free_delivery_threshold } : {}),
             ...(loaded.hero_headline ? { heroHeadline: loaded.hero_headline } : {}),
             ...(loaded.hero_subheadline ? { heroSubHeadline: loaded.hero_subheadline } : {}),
+            ...(loaded.facebook ? { facebook: loaded.facebook } : {}),
+            ...(loaded.instagram ? { instagram: loaded.instagram } : {}),
+            ...(loaded.tiktok ? { tiktok: loaded.tiktok } : {}),
           }));
         }
       } catch (e) {
@@ -63,20 +74,31 @@ export default function AdminSettingsPage() {
     setSaving(true);
 
     try {
-      const supabase = createClient();
-      const rows = [
-        { key: 'brand_name', value: settings.brandName || '' },
-        { key: 'whatsapp_number', value: settings.whatsappNumber || '' },
-        { key: 'delivery_message', value: settings.deliveryText || '' },
-        { key: 'hero_headline', value: settings.heroHeadline || '' },
-        { key: 'hero_subheadline', value: settings.heroSubHeadline || '' },
-      ];
+      const payload: Record<string, string> = {
+        brand_name: settings.brandName || '',
+        tagline: settings.tagline || '',
+        tagline_secondary: settings.taglineSecondary || '',
+        tagline_urdu: settings.taglineUrdu || '',
+        whatsapp_number: settings.whatsappNumber || '',
+        whatsapp_display: settings.whatsappDisplay || '',
+        phone: settings.phone || '',
+        email: settings.email || '',
+        delivery_message: settings.deliveryText || '',
+        free_delivery_threshold: settings.freeDeliveryThreshold || '0',
+        hero_headline: settings.heroHeadline || '',
+        hero_subheadline: settings.heroSubHeadline || '',
+        facebook: settings.facebook || '',
+        instagram: settings.instagram || '',
+        tiktok: settings.tiktok || '',
+      };
 
-      for (const row of rows) {
-        await supabase.from('settings').upsert(row as any, { onConflict: 'key' });
+      const res = await saveSettingsAction(payload);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
       }
 
-      toast.success('Brand settings saved to database!', {
+      toast.success('Brand settings saved to database & cache refreshed!', {
         icon: '🌿',
         style: { background: '#14532d', color: 'white', borderRadius: '12px' },
       });

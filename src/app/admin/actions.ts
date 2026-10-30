@@ -215,3 +215,38 @@ export async function getNewOrdersCountAction(): Promise<number> {
     return 0;
   }
 }
+
+/**
+ * Save Site Settings Server Action
+ * Updates key/value pairs in the settings table and purges layout cache.
+ */
+export async function saveSettingsAction(settings: Record<string, string>) {
+  await requireAdmin();
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const rows = Object.entries(settings).map(([key, value]) => ({
+      key,
+      value: value ?? '',
+      updated_at: new Date().toISOString(),
+    }));
+
+    for (const row of rows) {
+      const { error } = await supabase
+        .from('settings')
+        .upsert(row, { onConflict: 'key' });
+      if (error) throw error;
+    }
+
+    // Instantly purge cache for the entire site (layout, pages, footer)
+    revalidatePath('/', 'layout');
+    revalidatePath('/');
+    revalidatePath('/shop');
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to save settings:', err);
+    return { error: err.message || 'Failed to save settings to database' };
+  }
+}
