@@ -12,7 +12,7 @@ const config = {
   whatsappNumber: '923165479364', // international format without +
   whatsappDisplay: '0316-5479364',
   phone: '0316-5479364',
-  email: 'info@desihub.pk',
+  email: 'desihub224@gmail.com',
 
   // Delivery
   deliveryText: 'Free Home Delivery in Islamabad & Rawalpindi',

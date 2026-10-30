@@ -5,47 +5,51 @@ import Link from 'next/link';
 import { FiPhone, FiMapPin, FiMail, FiArrowRight } from 'react-icons/fi';
 import { FaFacebookF, FaInstagram, FaTiktok, FaWhatsapp } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
-import config from '@/lib/config';
 import { useLanguageStore, translations } from '@/store/language';
 import Logo from '@/components/ui/Logo';
 
-interface StoreInfo {
-  brandName: string;
-  taglineUrdu: string;
-  taglineSecondary: string;
-  phone: string;
-  whatsappNumber: string;
-  whatsappDisplay: string;
-  email: string;
-  facebook: string;
-  instagram: string;
-  tiktok: string;
-  deliveryMessage: string;
+export interface StoreSettingsProps {
+  brandName?: string;
+  taglineUrdu?: string;
+  taglineSecondary?: string;
+  phone?: string;
+  whatsappNumber?: string;
+  whatsappDisplay?: string;
+  email?: string;
+  facebook?: string;
+  instagram?: string;
+  tiktok?: string;
+  deliveryMessage?: string;
 }
 
-export default function Footer() {
+interface FooterProps {
+  initialSettings?: StoreSettingsProps;
+}
+
+export default function Footer({ initialSettings }: FooterProps) {
   const { language } = useLanguageStore();
   const t = translations[language];
 
-  // Dynamic state initialized with config defaults, updated from Supabase settings
-  const [storeInfo, setStoreInfo] = useState<StoreInfo>({
-    brandName: config.brandName,
-    taglineUrdu: config.taglineUrdu,
-    taglineSecondary: config.taglineSecondary,
-    phone: config.phone,
-    whatsappNumber: config.whatsappNumber,
-    whatsappDisplay: config.whatsappDisplay,
-    email: config.email,
-    facebook: config.social.facebook,
-    instagram: config.social.instagram,
-    tiktok: config.social.tiktok,
-    deliveryMessage: config.deliveryText,
+  // Initialize with server-rendered fresh database settings
+  const [storeInfo, setStoreInfo] = useState<StoreSettingsProps>({
+    brandName: initialSettings?.brandName || 'DESI HUB',
+    taglineUrdu: initialSettings?.taglineUrdu || 'قدرتی غذائیں، صحت مند زندگی',
+    taglineSecondary: initialSettings?.taglineSecondary || 'Natural Food, Better Life',
+    phone: initialSettings?.phone || '0316-5479364',
+    whatsappNumber: initialSettings?.whatsappNumber || '923165479364',
+    whatsappDisplay: initialSettings?.whatsappDisplay || '0316-5479364',
+    email: initialSettings?.email || 'desihub224@gmail.com',
+    facebook: initialSettings?.facebook || 'https://facebook.com/desihub',
+    instagram: initialSettings?.instagram || 'https://instagram.com/desihub',
+    tiktok: initialSettings?.tiktok || 'https://tiktok.com/@desihub',
+    deliveryMessage: initialSettings?.deliveryMessage || 'Free Home Delivery in Islamabad & Rawalpindi',
   });
 
+  // Client-side hydration re-check from Supabase to guarantee real-time synchronization
   useEffect(() => {
     const supabase = createClient();
 
-    async function fetchSettings() {
+    async function fetchLiveSettings() {
       try {
         const { data, error } = await supabase.from('settings').select('key, value');
         if (error || !data || data.length === 0) return;
@@ -57,6 +61,8 @@ export default function Footer() {
           }
         });
 
+        const liveEmail = map.store_email || map.email;
+
         setStoreInfo((prev) => ({
           ...prev,
           brandName: map.brand_name || prev.brandName,
@@ -65,18 +71,18 @@ export default function Footer() {
           phone: map.phone || prev.phone,
           whatsappNumber: map.whatsapp_number || prev.whatsappNumber,
           whatsappDisplay: map.whatsapp_display || map.whatsapp_number || prev.whatsappDisplay,
-          email: map.email || prev.email,
+          email: liveEmail || prev.email,
           facebook: map.facebook || prev.facebook,
           instagram: map.instagram || prev.instagram,
           tiktok: map.tiktok || prev.tiktok,
           deliveryMessage: map.delivery_message || prev.deliveryMessage,
         }));
       } catch (err) {
-        console.warn('Failed to load store settings in Footer:', err);
+        console.warn('Live settings sync warning in Footer:', err);
       }
     }
 
-    fetchSettings();
+    fetchLiveSettings();
   }, []);
 
   return (
@@ -139,34 +145,45 @@ export default function Footer() {
               Get in Touch
             </h4>
             <div className="flex flex-col gap-3 text-sm">
-              <a
-                href={`tel:${storeInfo.phone}`}
-                className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
-                  <FiPhone size={15} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block uppercase">Phone Support</span>
-                  <span className="font-semibold font-mono text-[#fdf8ec]">{storeInfo.whatsappDisplay || storeInfo.phone}</span>
-                </div>
-              </a>
+              {/* Phone */}
+              {storeInfo.phone && (
+                <a
+                  href={`tel:${storeInfo.phone}`}
+                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
+                    <FiPhone size={15} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-stone-300 block uppercase">Phone Support</span>
+                    <span className="font-semibold font-mono text-[#fdf8ec]">
+                      {storeInfo.whatsappDisplay || storeInfo.phone}
+                    </span>
+                  </div>
+                </a>
+              )}
 
-              <a
-                href={`https://wa.me/${storeInfo.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I want to order from DESI HUB.')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-              >
-                <div className="w-8 h-8 rounded-lg bg-emerald-700/60 flex items-center justify-center text-emerald-300">
-                  <FaWhatsapp size={16} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block uppercase">WhatsApp Orders</span>
-                  <span className="font-semibold font-mono text-[#fdf8ec]">{storeInfo.whatsappDisplay || storeInfo.whatsappNumber}</span>
-                </div>
-              </a>
+              {/* WhatsApp */}
+              {storeInfo.whatsappNumber && (
+                <a
+                  href={`https://wa.me/${storeInfo.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I want to order from DESI HUB.')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-emerald-700/60 flex items-center justify-center text-emerald-300">
+                    <FaWhatsapp size={16} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-stone-300 block uppercase">WhatsApp Orders</span>
+                    <span className="font-semibold font-mono text-[#fdf8ec]">
+                      {storeInfo.whatsappDisplay || storeInfo.whatsappNumber}
+                    </span>
+                  </div>
+                </a>
+              )}
 
+              {/* Free Home Delivery */}
               <div className="flex items-center gap-3 text-[#f5edd5]">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
                   <FiMapPin size={15} />
@@ -177,18 +194,21 @@ export default function Footer() {
                 </div>
               </div>
 
-              <a
-                href={`mailto:${storeInfo.email}`}
-                className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
-                  <FiMail size={15} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block uppercase">Email</span>
-                  <span className="font-mono text-xs text-[#fdf8ec]">{storeInfo.email}</span>
-                </div>
-              </a>
+              {/* Email — strictly dynamic from store_email or email */}
+              {storeInfo.email && (
+                <a
+                  href={`mailto:${storeInfo.email}`}
+                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
+                    <FiMail size={15} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-stone-300 block uppercase">Email</span>
+                    <span className="font-mono text-xs text-[#fdf8ec] font-semibold">{storeInfo.email}</span>
+                  </div>
+                </a>
+              )}
             </div>
           </div>
 
@@ -206,33 +226,39 @@ export default function Footer() {
             </p>
 
             <div className="flex gap-2.5">
-              <a
-                href={storeInfo.facebook}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
-                aria-label="Facebook"
-              >
-                <FaFacebookF size={16} />
-              </a>
-              <a
-                href={storeInfo.instagram}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
-                aria-label="Instagram"
-              >
-                <FaInstagram size={16} />
-              </a>
-              <a
-                href={storeInfo.tiktok}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
-                aria-label="TikTok"
-              >
-                <FaTiktok size={16} />
-              </a>
+              {storeInfo.facebook && (
+                <a
+                  href={storeInfo.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
+                  aria-label="Facebook"
+                >
+                  <FaFacebookF size={16} />
+                </a>
+              )}
+              {storeInfo.instagram && (
+                <a
+                  href={storeInfo.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
+                  aria-label="Instagram"
+                >
+                  <FaInstagram size={16} />
+                </a>
+              )}
+              {storeInfo.tiktok && (
+                <a
+                  href={storeInfo.tiktok}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
+                  aria-label="TikTok"
+                >
+                  <FaTiktok size={16} />
+                </a>
+              )}
             </div>
           </div>
         </div>

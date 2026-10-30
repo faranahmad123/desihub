@@ -83,6 +83,7 @@ export default function AdminSettingsPage() {
         whatsapp_display: settings.whatsappDisplay || '',
         phone: settings.phone || '',
         email: settings.email || '',
+        store_email: settings.email || '',
         delivery_message: settings.deliveryText || '',
         free_delivery_threshold: settings.freeDeliveryThreshold || '0',
         hero_headline: settings.heroHeadline || '',
@@ -202,7 +203,7 @@ export default function AdminSettingsPage() {
                 name="email"
                 value={settings.email}
                 onChange={handleChange}
-                placeholder="info@desihub.pk"
+                placeholder="desihub224@gmail.com"
                 className="input-field text-sm"
               />
             </div>

@@ -303,12 +303,22 @@ CREATE POLICY "Public can view non-sensitive settings"
     OR key IN (
       'store_name',
       'brand_name',
+      'store_email',
+      'email',
+      'phone',
       'whatsapp_number',
+      'whatsapp_display',
       'delivery_message',
       'banner_text',
       'hero_headline',
       'hero_subheadline',
-      'currency'
+      'currency',
+      'facebook',
+      'instagram',
+      'tiktok',
+      'tagline',
+      'tagline_secondary',
+      'tagline_urdu'
     )
   );
 
