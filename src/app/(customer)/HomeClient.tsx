@@ -248,7 +248,7 @@ export default function HomeClient() {
       {/* =========================================================
           1. HERO SECTION (Farmland Background + Dark Green Overlay + Light Cream Text)
           ========================================================= */}
-      <section className="on-dark relative overflow-hidden min-h-[540px] md:min-h-[600px] flex items-center bg-[#14532d]">
+      <section className="relative overflow-hidden min-h-[540px] md:min-h-[600px] flex items-center bg-[#14532d]">
         {/* Full-width Farmland Background Image */}
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -276,7 +276,7 @@ export default function HomeClient() {
             <div
               className={`${
                 currentHeroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
-              } flex flex-col items-center text-center space-y-5 animate-slide-up`}
+              } on-dark flex flex-col items-center text-center space-y-5 animate-slide-up`}
             >
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-[#f5e6b8] bg-[#c9a227]/25 border border-[#c9a227]/50 shadow-xs backdrop-blur-xs">
@@ -433,15 +433,21 @@ export default function HomeClient() {
                     </Link>
 
                     {/* Caption Panel BELOW the image */}
-                    <div className="p-4 sm:p-5 bg-white border-t border-stone-100 flex flex-col gap-3">
+                    <div className="p-4 sm:p-5 bg-white border-t border-stone-100 flex flex-col gap-3 text-gray-900">
                       {/* Full product name (wrapped onto up to 2 lines, never cut off with '...') */}
                       <Link
                         href={`/product/${currentHeroProduct.slug}`}
-                        className="group cursor-pointer"
+                        className="group cursor-pointer block text-gray-900 hover:text-[#14532d]"
                       >
                         <h3
-                          className="text-base sm:text-lg font-extrabold text-[#14532d] leading-snug line-clamp-2 group-hover:text-[#c9a227] transition-colors"
-                          style={{ fontFamily: 'var(--font-heading)' }}
+                          className={`text-base sm:text-lg font-extrabold text-[#14532d] group-hover:text-[#c9a227] leading-snug line-clamp-2 transition-colors ${
+                            isUrdu ? 'urdu text-right text-lg sm:text-xl' : ''
+                          }`}
+                          style={
+                            isUrdu
+                              ? { fontFamily: 'var(--font-urdu)', direction: 'rtl', color: '#14532d' }
+                              : { fontFamily: 'var(--font-heading)', color: '#14532d' }
+                          }
                         >
                           {isUrdu
                             ? currentHeroProduct.title_ur || currentHeroProduct.title
@@ -451,13 +457,13 @@ export default function HomeClient() {
 
                       {/* Unit badge & Large Gold Price Pill */}
                       <div className="flex items-center justify-between gap-2 pt-0.5">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-100 text-stone-800 border border-stone-200">
                           {currentHeroProduct.unit}
                         </span>
 
                         <div className="px-4 py-1 rounded-full bg-[#c9a227] text-[#14532d] font-black text-base sm:text-lg shadow-xs flex items-center gap-1.5">
                           <Sparkles className="w-4 h-4 text-[#14532d]" />
-                          <span>{formatPrice(currentHeroProduct.price)}</span>
+                          <span className="text-[#14532d]">{formatPrice(currentHeroProduct.price)}</span>
                         </div>
                       </div>
 

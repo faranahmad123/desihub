@@ -83,6 +83,20 @@
   color: #e8c547;
 }
 
+/* Ensure white/light cards inside .on-dark sections (like the hero slider card) preserve their own text colors */
+.on-dark .bg-white,
+.on-dark .bg-white h1,
+.on-dark .bg-white h2,
+.on-dark .bg-white h3,
+.on-dark .bg-white h4,
+.on-dark .bg-white h5,
+.on-dark .bg-white h6,
+.on-dark .bg-white p,
+.on-dark .bg-white a,
+.on-dark .bg-white span {
+  color: revert !important;
+}
+
 /* Hero Headline specific styling */
 .hero-headline {
   color: #fdf8ec !important;
