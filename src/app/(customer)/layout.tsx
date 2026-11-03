@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { SUPABASE_URL, SUPABASE_PUBLIC_KEY } from '@/lib/supabase/env';
 import { unstable_noStore as noStore } from 'next/cache';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -42,6 +43,10 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
     tiktok: 'https://tiktok.com/@desihub',
     deliveryMessage: 'Free Home Delivery in Islamabad & Rawalpindi',
   };
+
+  if (!SUPABASE_URL || !SUPABASE_PUBLIC_KEY || SUPABASE_URL.includes('placeholder')) {
+    return fallback;
+  }
 
   try {
     const supabase = await createServerSupabaseClient();
