@@ -73,7 +73,7 @@ export default function Footer({ initialSettings }: FooterProps) {
           whatsappDisplay: map.whatsapp_display || map.whatsapp_number || prev.whatsappDisplay,
           email: liveEmail || prev.email,
           facebook: map.facebook || prev.facebook,
-          instagram: map.instagram || prev.instagram,
+          instagram: map.instagram_url || map.instagram || prev.instagram,
           tiktok: map.tiktok || prev.tiktok,
           deliveryMessage: map.delivery_message || prev.deliveryMessage,
         }));

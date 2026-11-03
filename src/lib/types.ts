@@ -23,6 +23,7 @@ export interface Product {
   image_url: string | null;
   is_active: boolean;
   is_featured: boolean;
+  show_in_hero?: boolean;
   in_stock: boolean;
   sort_order: number;
   created_at: string;
@@ -85,4 +86,16 @@ export interface AdminProfile {
   user_id: string;
   username: string;
   created_at: string;
+}
+
+export interface Testimonial {
+  id: string;
+  customer_name: string;
+  city: string;
+  message: string;
+  rating: number; // 1 to 5
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at?: string;
 }

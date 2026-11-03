@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShoppingCart, Check, Sparkles, Leaf } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { useLanguageStore } from '@/store/language';
@@ -46,21 +47,25 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   return (
     <div className="group rounded-2xl bg-white border border-stone-200/80 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden relative">
-      {/* Product Image Link (4:3 aspect ratio) */}
+      {/* Product Image Link (4:3 aspect ratio, never cropped, cream bg with small padding) */}
       <Link
         href={`/product/${product.slug}`}
-        className="block relative aspect-[4/3] w-full overflow-hidden bg-[#fdf8ec]"
+        className="block relative aspect-[4/3] w-full overflow-hidden bg-[#fdf8ec] p-2.5"
       >
         {product.image_url ? (
-          <img
-            src={product.image_url}
-            alt={product.title}
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            loading="lazy"
-          />
+          <div className="relative w-full h-full">
+            <Image
+              src={product.image_url}
+              alt={product.title}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-contain transition-transform duration-300 ease-out group-hover:scale-105"
+              loading="lazy"
+            />
+          </div>
         ) : (
-          /* Clean branded placeholder: cream background #fdf8ec, green leaf icon and product name, never a random photo */
-          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-[#fdf8ec]">
+          /* Clean branded placeholder: cream background #fdf8ec, green leaf icon and product name */
+          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-[#fdf8ec]">
             <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-2 text-[#14532d] shadow-xs">
               <Leaf className="w-6 h-6 text-[#14532d]" />
             </div>
@@ -78,7 +83,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
         {/* Featured Ribbon */}
         {product.is_featured && product.in_stock && (
-          <div className="absolute top-2.5 left-2.5 z-10">
+          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-[#14532d] bg-[#f5e6b8] border border-[#c9a227]/40 shadow-xs">
               <Sparkles className="w-3 h-3 text-[#c9a227]" /> Featured
             </span>
@@ -148,7 +153,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           {product.in_stock ? (
             <button
               onClick={handleAddToCart}
-              className={`w-full h-11 sm:h-12 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 shadow-xs active:scale-[0.98] ${
+              className={`w-full h-11 sm:h-12 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 shadow-xs active:scale-[0.98] cursor-pointer ${
                 justAdded
                   ? 'bg-emerald-600 text-white'
                   : 'bg-[#14532d] hover:bg-[#166534] text-[#fdf8ec]'

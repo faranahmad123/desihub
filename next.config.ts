@@ -19,13 +19,25 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: supabaseHost,
-        pathname: "/storage/v1/object/public/**",
+        pathname: "/**",
       },
       // Fallback wildcard pattern for any Supabase project instances
       {
         protocol: "https",
         hostname: "*.supabase.co",
-        pathname: "/storage/v1/object/public/**",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+      {
+        protocol: "http",
+        hostname: "**",
       },
     ],
   },

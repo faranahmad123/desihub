@@ -1,11 +1,12 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Home, Package, Copy, CheckCircle, Sparkles } from 'lucide-react';
+import { Check, Home, Package, Copy, CheckCircle, Sparkles, AlertCircle, Info } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { useLanguageStore, translations } from '@/store/language';
+import { createClient } from '@/lib/supabase/client';
 import config from '@/lib/config';
 import { formatPrice } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -24,6 +25,44 @@ function OrderSuccessContent() {
   const total = parseFloat(searchParams.get('total') || '0');
 
   const [copied, setCopied] = useState(false);
+  const [freeDeliveryCities, setFreeDeliveryCities] = useState<string>('Islamabad, Rawalpindi');
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function loadSettings() {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'free_delivery_cities')
+          .maybeSingle();
+        if (data?.value) {
+          setFreeDeliveryCities(data.value);
+        }
+      } catch (err) {
+        console.warn('Could not load free_delivery_cities on order success:', err);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const freeList = freeDeliveryCities
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+
+  const cleanCity = customerCity.trim().toLowerCase();
+  const isOutsideFreeDelivery = cleanCity !== '' && !freeList.includes(cleanCity);
+
+  const freeCitiesFormatted = freeDeliveryCities
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .join(' & ');
+
+  const outsideNotice = isUrdu
+    ? `${freeCitiesFormatted} میں مفت ہوم ڈیلیوری۔ دیگر شہروں کے لیے ہم واٹس ایپ پر ڈیلیوری کی تصدیق کریں گے۔`
+    : `Free home delivery in ${freeCitiesFormatted}. For other cities we will confirm delivery on WhatsApp.`;
 
   let items: Array<{ t: string; q: number; p: number }> = [];
   try {
@@ -86,6 +125,21 @@ function OrderSuccessContent() {
           Your order has been recorded and will be packed fresh.
         </p>
 
+        {/* Notice if outside free-delivery area */}
+        {isOutsideFreeDelivery && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-6 text-left flex items-start gap-3 shadow-xs">
+            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-amber-900">
+                Delivery Confirmation Required for {customerCity}
+              </h4>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                {outsideNotice}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Order Number Card */}
         <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200/80 shadow-xs mb-6">
           <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1">
@@ -108,8 +162,8 @@ function OrderSuccessContent() {
             </button>
           </div>
           <p className="text-xs text-stone-500 mt-2">
-            Payment method: <strong className="text-stone-800">Cash on Delivery</strong> • Delivery:{' '}
-            <strong className="text-emerald-700">Free Home Delivery</strong>
+            Payment method: <strong className="text-stone-800">Cash on Delivery</strong> • City:{' '}
+            <strong className="text-stone-800">{customerCity || 'Islamabad'}</strong>
           </p>
         </div>
 

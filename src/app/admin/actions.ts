@@ -1,29 +1,154 @@
 'use server';
 
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 
-import { adminLoginAction as doAdminLogin } from './login-action';
+const GENERIC_ERROR = 'Incorrect username or password';
+// Debug mode turned ON per user request
+const DEBUG = process.env.ADMIN_LOGIN_DEBUG !== '0';
 
-// Wrapper for backward compatibility
+function fail(code: string, detail?: string): { error: string } {
+  console.error('[admin-login]', code, detail ?? '');
+  return {
+    error: DEBUG ? `${GENERIC_ERROR} (${code}${detail ? ': ' + detail : ''})` : GENERIC_ERROR,
+  };
+}
+
+// Only allow local admin pages, never the login page itself or another site
+function safeNext(next?: string): string {
+  if (
+    !next ||
+    !next.startsWith('/admin') ||
+    next.startsWith('//') ||
+    next.startsWith('/admin/login')
+  ) {
+    return '/admin';
+  }
+  return next;
+}
+
 export async function adminLoginAction(input: {
   login: string;
   password: string;
   next?: string;
-}) {
-  return await doAdminLogin(input);
+}): Promise<{ error?: string; redirectUrl?: string }> {
+  try {
+    const login = (input.login ?? '').trim();
+    const password = input.password ?? '';
+    if (!login || !password) return fail('EMPTY_FIELDS');
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const missing = [
+      !url && 'NEXT_PUBLIC_SUPABASE_URL',
+      !anonKey && 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      !serviceKey && 'SUPABASE_SERVICE_ROLE_KEY',
+    ].filter(Boolean);
+    if (missing.length > 0 || !url || !anonKey || !serviceKey) {
+      return fail('ENV_MISSING', missing.join(', '));
+    }
+
+    // Server-only client with full access (never sent to the browser)
+    const admin = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // 1. Username -> email (an input containing "@" is used as the email)
+    let email = login;
+    if (!login.includes('@')) {
+      const { data, error } = await admin
+        .from('profiles')
+        .select('email')
+        .eq('username', login.toLowerCase())
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      if (error) return fail('USERNAME_LOOKUP_ERROR', error.message);
+      if (!data?.email) return fail('USERNAME_NOT_FOUND');
+      email = data.email;
+    }
+
+    // 2. Sign in with a client that saves the session cookies
+    const cookieStore = await cookies();
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (list) => {
+          list.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        },
+      },
+    });
+
+    const { data: auth, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError || !auth.user) {
+      return fail('SIGNIN_FAILED', signInError?.message);
+    }
+
+    // 3. Must be an admin
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', auth.user.id)
+      .maybeSingle();
+
+    if (profileError) return fail('PROFILE_CHECK_ERROR', profileError.message);
+
+    if (profile?.role !== 'admin') {
+      await supabase.auth.signOut();
+      return fail('NOT_ADMIN', profile ? `role is ${profile.role}` : 'no profile row');
+    }
+
+    return { redirectUrl: safeNext(input.next) };
+  } catch (err) {
+    return fail('UNEXPECTED', err instanceof Error ? err.message : String(err));
+  }
 }
 
 /**
  * Admin Logout Server Action
+ * Creates the cookie-aware @supabase/ssr server client, calls supabase.auth.signOut(),
+ * deletes any remaining cookies starting with "sb-", then redirects to /admin/login.
  */
-export async function adminLogoutAction() {
+export async function logoutAction() {
   try {
     const supabase = await createServerSupabaseClient();
     await supabase.auth.signOut();
-  } catch {}
-  return { success: true };
+  } catch (err) {
+    console.error('Error during signOut:', err);
+  }
+
+  try {
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    for (const c of allCookies) {
+      if (c.name.startsWith('sb-')) {
+        cookieStore.delete(c.name);
+      }
+    }
+  } catch (err) {
+    console.error('Error clearing sb- cookies:', err);
+  }
+
+  redirect('/admin/login');
+}
+
+// Backward compatibility alias
+export async function adminLogoutAction() {
+  return logoutAction();
 }
 
 /**
@@ -68,7 +193,9 @@ export async function saveProductAction(payload: {
   image_url?: string | null;
   in_stock: boolean;
   is_featured: boolean;
+  show_in_hero?: boolean;
   is_active: boolean;
+  sort_order?: number;
 }) {
   await requireAdmin();
 
@@ -133,7 +260,7 @@ export async function deleteProductAction(productId: string, imageUrl?: string |
           const filePath = decodeURIComponent(parts[1].split('?')[0]);
           await supabase.storage.from('product-images').remove([filePath]);
         }
-      } catch {}
+      } catch { }
     }
 
     const { error } = await supabase.from('products').delete().eq('id', productId);
@@ -154,7 +281,7 @@ export async function deleteProductAction(productId: string, imageUrl?: string |
  */
 export async function toggleProductFieldAction(
   productId: string,
-  field: 'in_stock' | 'is_featured' | 'is_active',
+  field: 'in_stock' | 'is_featured' | 'is_active' | 'show_in_hero',
   value: boolean
 ) {
   await requireAdmin();
@@ -199,27 +326,6 @@ export async function updateOrderStatusAction(
 }
 
 /**
- * Delete Order Server Action
- * Securely deletes an order by ID (with cascade cleanup on order_items).
- */
-export async function deleteOrderAction(orderId: string) {
-  await requireAdmin();
-
-  const supabase = await createServerSupabaseClient();
-  const { error } = await supabase
-    .from('orders')
-    .delete()
-    .eq('id', orderId);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath('/admin/orders');
-  return { success: true };
-}
-
-/**
  * Get New Orders Count Server Action (for Navigation badge)
  */
 export async function getNewOrdersCountAction(): Promise<number> {
@@ -237,37 +343,121 @@ export async function getNewOrdersCountAction(): Promise<number> {
   }
 }
 
+
 /**
- * Save Site Settings Server Action
- * Updates key/value pairs in the settings table and purges layout cache.
+ * =========================================================
+ * TESTIMONIALS / CUSTOMER FEEDBACK SERVER ACTIONS
+ * =========================================================
  */
-export async function saveSettingsAction(settings: Record<string, string>) {
+
+export interface TestimonialInput {
+  id?: string;
+  customer_name: string;
+  city: string;
+  message: string;
+  rating: number; // 1 to 5
+  is_active: boolean;
+  sort_order?: number;
+}
+
+export async function saveTestimonialAction(payload: TestimonialInput) {
+  await requireAdmin();
+
+  const customerName = payload.customer_name ? payload.customer_name.trim() : '';
+  const city = payload.city ? payload.city.trim() : '';
+  const message = payload.message ? payload.message.trim() : '';
+  const rating = Math.min(5, Math.max(1, Math.round(Number(payload.rating) || 5)));
+  const sortOrder = Number(payload.sort_order) || 0;
+
+  if (!customerName) {
+    return { error: 'Customer name is required' };
+  }
+  if (!city) {
+    return { error: 'City is required' };
+  }
+  if (!message) {
+    return { error: 'Feedback message is required' };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    if (payload.id) {
+      const { error } = await supabase
+        .from('testimonials')
+        .update({
+          customer_name: customerName,
+          city,
+          message,
+          rating,
+          is_active: payload.is_active,
+          sort_order: sortOrder,
+        })
+        .eq('id', payload.id);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('testimonials')
+        .insert([
+          {
+            customer_name: customerName,
+            city,
+            message,
+            rating,
+            is_active: payload.is_active,
+            sort_order: sortOrder,
+          },
+        ]);
+
+      if (error) throw error;
+    }
+
+    revalidatePath('/', 'layout');
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to save testimonial:', err);
+    return { error: err.message || 'Failed to save feedback' };
+  }
+}
+
+export async function deleteTestimonialAction(id: string) {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
 
   try {
-    const rows = Object.entries(settings).map(([key, value]) => ({
-      key,
-      value: value ?? '',
-      updated_at: new Date().toISOString(),
-    }));
+    const { error } = await supabase.from('testimonials').delete().eq('id', id);
+    if (error) throw error;
 
-    for (const row of rows) {
-      const { error } = await supabase
-        .from('settings')
-        .upsert(row, { onConflict: 'key' });
-      if (error) throw error;
-    }
-
-    // Instantly purge cache for the entire site (layout, pages, footer)
     revalidatePath('/', 'layout');
     revalidatePath('/');
-    revalidatePath('/shop');
-
     return { success: true };
   } catch (err: any) {
-    console.error('Failed to save settings:', err);
-    return { error: err.message || 'Failed to save settings to database' };
+    console.error('Failed to delete testimonial:', err);
+    return { error: err.message || 'Failed to delete feedback' };
+  }
+}
+
+export async function toggleTestimonialActiveAction(id: string, isActive: boolean) {
+  await requireAdmin();
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const { error } = await supabase
+      .from('testimonials')
+      .update({ is_active: isActive })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/', 'layout');
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to toggle testimonial status:', err);
+    return { error: err.message || 'Failed to update feedback status' };
   }
 }

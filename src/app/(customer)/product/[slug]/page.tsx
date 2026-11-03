@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowLeft,
   Minus,
@@ -136,14 +137,19 @@ function ProductDetailContent() {
       </button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
-        {/* Product Image Box (4:3 ratio with clean fallback) */}
-        <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#fdf8ec] border border-stone-200/80 shadow-md">
+        {/* Product Image Box (4:3 ratio, never cropped, object-contain, cream bg, small padding) */}
+        <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#fdf8ec] border border-stone-200/80 shadow-md p-3 sm:p-5 flex items-center justify-center">
           {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.title}
-              className="w-full h-full object-cover"
-            />
+            <div className="relative w-full h-full">
+              <Image
+                src={product.image_url}
+                alt={product.title}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-contain"
+              />
+            </div>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-[#fdf8ec]">
               <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-3 text-[#14532d]">

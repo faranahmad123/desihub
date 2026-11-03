@@ -56,6 +56,7 @@ function ProductsContent() {
     image_url: '',
     in_stock: true,
     is_featured: false,
+    show_in_hero: false,
     is_active: true,
   });
 
@@ -101,6 +102,7 @@ function ProductsContent() {
       image_url: '',
       in_stock: true,
       is_featured: false,
+      show_in_hero: false,
       is_active: true,
     });
     setIsModalOpen(true);
@@ -121,6 +123,7 @@ function ProductsContent() {
       image_url: product.image_url || '',
       in_stock: product.in_stock,
       is_featured: product.is_featured,
+      show_in_hero: Boolean(product.show_in_hero),
       is_active: product.is_active,
     });
     setIsModalOpen(true);
@@ -198,6 +201,7 @@ function ProductsContent() {
       image_url: formData.image_url.trim() || null,
       in_stock: formData.in_stock,
       is_featured: formData.is_featured,
+      show_in_hero: formData.show_in_hero,
       is_active: formData.is_active,
     };
 
@@ -237,7 +241,7 @@ function ProductsContent() {
 
   const handleToggle = async (
     product: Product,
-    field: 'in_stock' | 'is_featured' | 'is_active'
+    field: 'in_stock' | 'is_featured' | 'is_active' | 'show_in_hero'
   ) => {
     const updated = !product[field];
     // Optimistic UI update
@@ -250,10 +254,11 @@ function ProductsContent() {
       toast.error(res.error);
       loadData();
     } else {
-      const labelMap = {
+      const labelMap: Record<'in_stock' | 'is_featured' | 'is_active' | 'show_in_hero', string> = {
         in_stock: updated ? 'Marked in stock' : 'Marked out of stock',
         is_featured: updated ? 'Featured on homepage' : 'Unfeatured',
         is_active: updated ? 'Product is now visible on storefront' : 'Product hidden from storefront',
+        show_in_hero: updated ? 'Added to hero slider' : 'Removed from hero slider',
       };
       toast.success(labelMap[field]);
     }
@@ -356,12 +361,12 @@ function ProductsContent() {
                 className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3"
               >
                 <div className="flex gap-3">
-                  <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center border border-slate-200/60">
+                  <div className="w-16 h-16 rounded-xl bg-white overflow-hidden flex-shrink-0 flex items-center justify-center border border-slate-200/60 p-1">
                     {product.image_url ? (
                       <img
                         src={product.image_url}
                         alt={product.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     ) : (
                       <FiImage className="text-slate-400" size={24} />
@@ -370,9 +375,16 @@ function ProductsContent() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-1">
-                      <h3 className="font-bold text-sm text-slate-900 truncate">
-                        {product.title}
-                      </h3>
+                      <div className="flex items-center gap-1.5 truncate">
+                        <h3 className="font-bold text-sm text-slate-900 truncate">
+                          {product.title}
+                        </h3>
+                        {product.show_in_hero && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                            Hero
+                          </span>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleToggle(product, 'is_active')}
                         className={`text-xs px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 ${
@@ -458,6 +470,7 @@ function ProductsContent() {
                     <th className="px-5 py-3.5 text-center">Status</th>
                     <th className="px-5 py-3.5 text-center">In Stock</th>
                     <th className="px-5 py-3.5 text-center">Featured</th>
+                    <th className="px-5 py-3.5 text-center">Hero</th>
                     <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -466,19 +479,26 @@ function ProductsContent() {
                     <tr key={product.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center border border-slate-200/60">
+                          <div className="w-12 h-12 rounded-xl bg-white overflow-hidden flex-shrink-0 flex items-center justify-center border border-slate-200/60 p-1">
                             {product.image_url ? (
                               <img
                                 src={product.image_url}
                                 alt={product.title}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                               />
                             ) : (
                               <FiImage className="text-slate-400" size={20} />
                             )}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900">{product.title}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-900">{product.title}</span>
+                              {product.show_in_hero && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  Hero
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-slate-500 font-urdu">{product.title_ur}</div>
                           </div>
                         </div>
@@ -533,6 +553,20 @@ function ProductsContent() {
                           }`}
                         >
                           <FiStar size={16} className={product.is_featured ? 'fill-amber-400' : ''} />
+                        </button>
+                      </td>
+
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          onClick={() => handleToggle(product, 'show_in_hero')}
+                          className={`px-2 py-1 rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
+                            product.show_in_hero
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                              : 'text-slate-300 border-transparent hover:text-slate-500'
+                          }`}
+                          title="Toggle home hero slider"
+                        >
+                          Hero
                         </button>
                       </td>
 
@@ -700,16 +734,21 @@ function ProductsContent() {
 
                   {formData.image_url ? (
                     <div className="flex flex-col sm:flex-row items-center gap-4 text-left">
-                      <img
-                        src={formData.image_url}
-                        alt="Preview"
-                        className="w-20 h-20 rounded-xl object-cover border border-slate-200"
-                      />
+                      <div className="w-20 h-20 rounded-xl bg-white p-1 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <img
+                          src={formData.image_url}
+                          alt="Preview"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-800 truncate">
                           Image uploaded & compressed to WebP (&lt;500 KB)
                         </p>
                         <p className="text-[11px] text-slate-500 mt-0.5">Click or drag another to replace</p>
+                        <p className="text-[11px] text-[#8a6810] font-medium mt-1">
+                          Use a clear photo of the whole product on a plain background.
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -719,7 +758,10 @@ function ProductsContent() {
                         Tap or drag photo here to upload
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Auto-compressed to WebP under 500 KB before upload
+                        Auto-compressed to WebP under 500 KB (max 1200 px, no cropping)
+                      </p>
+                      <p className="text-[11px] text-[#8a6810] font-medium mt-1">
+                        Use a clear photo of the whole product on a plain background.
                       </p>
                     </div>
                   )}
@@ -754,7 +796,7 @@ function ProductsContent() {
               </div>
 
               {/* Toggles */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
                   <input
                     type="checkbox"
@@ -762,7 +804,7 @@ function ProductsContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 rounded text-emerald-700"
                   />
-                  <span>Active (Visible)</span>
+                  <span>Active</span>
                 </label>
 
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
@@ -782,7 +824,17 @@ function ProductsContent() {
                     onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
                     className="w-4 h-4 rounded text-emerald-700"
                   />
-                  <span>Featured Item</span>
+                  <span>Featured</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <input
+                    type="checkbox"
+                    checked={formData.show_in_hero}
+                    onChange={(e) => setFormData({ ...formData, show_in_hero: e.target.checked })}
+                    className="w-4 h-4 rounded text-emerald-700"
+                  />
+                  <span>Show in home hero slider</span>
                 </label>
               </div>
 

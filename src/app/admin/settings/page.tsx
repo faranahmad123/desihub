@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FiSave, FiCheckCircle, FiShield, FiPhone, FiTruck, FiGlobe, FiInfo } from 'react-icons/fi';
+import { FiSave, FiCheckCircle, FiShield, FiPhone, FiTruck, FiGlobe, FiInfo, FiMapPin } from 'react-icons/fi';
 import { FaWhatsapp, FaFacebook, FaInstagram, FaTiktok } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
 import { saveSettingsAction } from '../actions';
@@ -20,10 +20,12 @@ export default function AdminSettingsPage() {
     email: config.email,
     deliveryText: config.deliveryText,
     freeDeliveryThreshold: config.freeDeliveryThreshold.toString(),
+    freeDeliveryCities: 'Islamabad, Rawalpindi',
     heroHeadline: config.heroHeadline,
     heroSubHeadline: config.heroSubHeadline,
     facebook: config.social.facebook,
     instagram: config.social.instagram,
+    instagramUrl: config.social.instagram,
     tiktok: config.social.tiktok,
   });
 
@@ -51,10 +53,15 @@ export default function AdminSettingsPage() {
             ...(loaded.email ? { email: loaded.email } : {}),
             ...(loaded.delivery_message ? { deliveryText: loaded.delivery_message } : {}),
             ...(loaded.free_delivery_threshold ? { freeDeliveryThreshold: loaded.free_delivery_threshold } : {}),
+            ...(loaded.free_delivery_cities ? { freeDeliveryCities: loaded.free_delivery_cities } : {}),
             ...(loaded.hero_headline ? { heroHeadline: loaded.hero_headline } : {}),
             ...(loaded.hero_subheadline ? { heroSubHeadline: loaded.hero_subheadline } : {}),
             ...(loaded.facebook ? { facebook: loaded.facebook } : {}),
-            ...(loaded.instagram ? { instagram: loaded.instagram } : {}),
+            ...(loaded.instagram_url
+              ? { instagramUrl: loaded.instagram_url, instagram: loaded.instagram_url }
+              : loaded.instagram
+              ? { instagramUrl: loaded.instagram, instagram: loaded.instagram }
+              : {}),
             ...(loaded.tiktok ? { tiktok: loaded.tiktok } : {}),
           }));
         }
@@ -74,6 +81,7 @@ export default function AdminSettingsPage() {
     setSaving(true);
 
     try {
+      const instaLink = (settings.instagramUrl || settings.instagram || '').trim();
       const payload: Record<string, string> = {
         brand_name: settings.brandName || '',
         tagline: settings.tagline || '',
@@ -86,10 +94,12 @@ export default function AdminSettingsPage() {
         store_email: settings.email || '',
         delivery_message: settings.deliveryText || '',
         free_delivery_threshold: settings.freeDeliveryThreshold || '0',
+        free_delivery_cities: settings.freeDeliveryCities || 'Islamabad, Rawalpindi',
         hero_headline: settings.heroHeadline || '',
         hero_subheadline: settings.heroSubHeadline || '',
         facebook: settings.facebook || '',
-        instagram: settings.instagram || '',
+        instagram: instaLink,
+        instagram_url: instaLink,
         tiktok: settings.tiktok || '',
       };
 
@@ -118,7 +128,7 @@ export default function AdminSettingsPage() {
           Brand & Store Settings
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Control contact numbers, WhatsApp checkout integration, delivery banners, and store copy
+          Control contact numbers, WhatsApp checkout integration, delivery banners, Instagram links, and store copy
         </p>
       </div>
 
@@ -218,7 +228,7 @@ export default function AdminSettingsPage() {
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-sm">Delivery & Banner Bar</h3>
-              <p className="text-xs text-slate-400">Controls announcements in the top and bottom banner bars</p>
+              <p className="text-xs text-slate-400">Controls announcements in top/bottom banners and free-delivery coverage</p>
             </div>
           </div>
 
@@ -235,6 +245,23 @@ export default function AdminSettingsPage() {
                 placeholder="Free Home Delivery in Islamabad & Rawalpindi"
                 className="input-field text-sm"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Free Delivery Cities (comma-separated) *
+              </label>
+              <input
+                type="text"
+                name="freeDeliveryCities"
+                value={settings.freeDeliveryCities}
+                onChange={handleChange}
+                placeholder="Islamabad, Rawalpindi"
+                className="input-field text-sm"
+              />
+              <span className="text-[11px] text-slate-400 mt-0.5 block">
+                Orders outside these cities display a WhatsApp confirmation notice
+              </span>
             </div>
 
             <div>
@@ -385,16 +412,25 @@ export default function AdminSettingsPage() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <FaInstagram className="text-pink-600" /> Instagram Handle
+                <FaInstagram className="text-pink-600" /> Instagram Link (instagram_url)
               </label>
               <input
                 type="url"
-                name="instagram"
-                value={settings.instagram}
-                onChange={handleChange}
-                placeholder="https://instagram.com/..."
+                name="instagramUrl"
+                value={settings.instagramUrl}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    instagramUrl: e.target.value,
+                    instagram: e.target.value,
+                  })
+                }
+                placeholder="https://instagram.com/desihub"
                 className="input-field text-xs"
               />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Powers the floating Instagram button & footer icon
+              </span>
             </div>
 
             <div>
@@ -418,7 +454,7 @@ export default function AdminSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="btn-primary text-sm py-3 px-8 flex items-center gap-2 shadow-md"
+            className="btn-primary text-sm py-3 px-8 flex items-center gap-2 shadow-md cursor-pointer"
           >
             <FiSave size={16} />
             {saving ? 'Saving Changes...' : 'Save Settings'}

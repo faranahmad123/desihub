@@ -69,37 +69,45 @@ export async function updateSession(request: NextRequest) {
   // Handle /admin/login specifically
   if (pathname === '/admin/login') {
     if (isAdminUser) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/admin';
-      url.search = '';
-      const redirectResponse = NextResponse.redirect(url);
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = '/admin';
+      redirectUrl.search = '';
+      const redirectResponse = NextResponse.redirect(redirectUrl);
       redirectResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+      redirectResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      redirectResponse.headers.set('Pragma', 'no-cache');
       return redirectResponse;
     }
     supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    supabaseResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    supabaseResponse.headers.set('Pragma', 'no-cache');
     return supabaseResponse;
   }
 
   // Protect all other /admin/* routes
   if (isAdminRoute) {
     if (!isAdminUser) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/admin/login';
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = '/admin/login';
       const rawNext = pathname + request.nextUrl.search;
       // Sanitize next: prevent redirect loop to /admin/login or open redirects
       const nextParam =
         rawNext.startsWith('/admin') && !rawNext.startsWith('/admin/login') && !rawNext.startsWith('//')
           ? rawNext
           : '/admin';
-      url.search = `?next=${encodeURIComponent(nextParam)}`;
+      redirectUrl.search = `?next=${encodeURIComponent(nextParam)}`;
 
-      const redirectResponse = NextResponse.redirect(url);
+      const redirectResponse = NextResponse.redirect(redirectUrl);
       redirectResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+      redirectResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      redirectResponse.headers.set('Pragma', 'no-cache');
       return redirectResponse;
     }
 
     // Authenticated admin accessing an admin route
     supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    supabaseResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    supabaseResponse.headers.set('Pragma', 'no-cache');
     return supabaseResponse;
   }
 

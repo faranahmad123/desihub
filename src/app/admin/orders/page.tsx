@@ -38,14 +38,28 @@ function OrdersContent() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [freeDeliveryCities, setFreeDeliveryCities] = useState<string>('Islamabad, Rawalpindi');
 
   const fetchOrders = async () => {
     try {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .order('created_at', { ascending: false });
+      const [ordersRes, settingsRes] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'free_delivery_cities')
+          .maybeSingle(),
+      ]);
+
+      if (settingsRes.data?.value) {
+        setFreeDeliveryCities(settingsRes.data.value);
+      }
+
+      const data = ordersRes.data;
 
       if (data) {
         // Sort so 'new' orders always come first, followed by newest date
@@ -61,6 +75,15 @@ function OrdersContent() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isOutsideFreeArea = (city: string) => {
+    if (!city) return false;
+    const list = freeDeliveryCities
+      .split(',')
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+    return !list.includes(city.trim().toLowerCase());
   };
 
   useEffect(() => {
@@ -302,12 +325,20 @@ function OrdersContent() {
                   </span>
                 </div>
 
-                <div className="text-xs text-slate-600 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <FiMapPin size={13} className="text-slate-400 flex-shrink-0" />
-                    <span className="truncate">
-                      {order.customer_city} — {order.customer_address}
-                    </span>
+                <div className="text-xs text-slate-600 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <FiMapPin size={13} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <strong className="text-slate-900">{order.customer_city}</strong>
+                        {isOutsideFreeArea(order.customer_city) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            Outside free-delivery area
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-500 mt-0.5">{order.customer_address}</p>
+                    </div>
                   </div>
 
                   {order.stall_slug && (
@@ -425,6 +456,16 @@ function OrdersContent() {
                       <td className="px-5 py-4">
                         <div className="font-semibold text-slate-900">{order.customer_name}</div>
                         <div className="text-xs text-slate-500 font-mono">{order.customer_phone}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-xs font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {order.customer_city}
+                          </span>
+                          {isOutsideFreeArea(order.customer_city) && (
+                            <span className="inline-block text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md whitespace-nowrap">
+                              Outside free-delivery area
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-4 text-xs text-slate-600 max-w-xs truncate">
@@ -532,9 +573,16 @@ function OrdersContent() {
                 <span className="text-slate-500 font-medium">Phone:</span>
                 <span className="font-bold text-slate-900 font-mono">{selectedOrder.customer_phone}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">City:</span>
-                <span className="font-semibold text-slate-900">{selectedOrder.customer_city}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900">{selectedOrder.customer_city}</span>
+                  {isOutsideFreeArea(selectedOrder.customer_city) && (
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
+                      Outside free-delivery area
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Address:</span>

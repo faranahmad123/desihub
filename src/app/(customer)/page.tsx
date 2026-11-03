@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Wheat,
   Droplet,
@@ -19,6 +20,9 @@ import {
   ArrowRight,
   Check,
   Sparkles,
+  MapPin,
+  Star,
+  Quote,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
@@ -26,7 +30,7 @@ import config from '@/lib/config';
 import { useLanguageStore, translations } from '@/store/language';
 import ProductCard from '@/components/shop/ProductCard';
 import ProductSkeleton from '@/components/shop/ProductSkeleton';
-import type { Product, Category } from '@/lib/types';
+import type { Product, Category, Testimonial } from '@/lib/types';
 import { formatPrice } from '@/lib/utils';
 
 // Lucide Icon mapping for categories
@@ -56,39 +60,96 @@ const getCategoryIcon = (slug: string, className = 'w-4 h-4') => {
 };
 
 export default function HomePage() {
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [heroProducts, setHeroProducts] = useState<Product[]>([]);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [isHeroPaused, setIsHeroPaused] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
   const [categories, setCategories] = useState<Category[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [visibleCount, setVisibleCount] = useState<number>(24);
+
   const { language } = useLanguageStore();
   const t = translations[language];
   const { t: translate } = useLanguageStore();
+  const isUrdu = language === 'ur';
 
+  // Check prefers-reduced-motion
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Fetch all necessary data
   useEffect(() => {
     const supabase = createClient();
 
     async function fetchData() {
       try {
-        const [productsRes, categoriesRes] = await Promise.all([
+        const [productsRes, heroFlaggedRes, categoriesRes, testimonialsRes] = await Promise.all([
+          // 1. All active products (featured first, then sort_order, then newest)
+          supabase
+            .from('products')
+            .select('*, category:categories(*)')
+            .eq('is_active', true)
+            .order('is_featured', { ascending: false })
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: false }),
+
+          // 2. Products explicitly flagged for hero slider
           supabase
             .from('products')
             .select('*')
             .eq('is_active', true)
-            .eq('is_featured', true)
+            .eq('show_in_hero', true)
             .order('sort_order', { ascending: true })
-            .limit(8),
+            .order('created_at', { ascending: false }),
+
+          // 3. Categories
           supabase
             .from('categories')
             .select('*')
             .eq('is_active', true)
             .order('sort_order', { ascending: true }),
+
+          // 4. Customer Feedback / Testimonials
+          supabase
+            .from('testimonials')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: false }),
         ]);
 
-        setFeaturedProducts(productsRes.data || []);
+        const prods = (productsRes.data || []) as Product[];
+        setAllProducts(prods);
         setCategories(categoriesRes.data || []);
-      } catch {
-        setFeaturedProducts([]);
-        setCategories([]);
+        setTestimonials((testimonialsRes.data || []) as Testimonial[]);
+
+        // Hero selection logic:
+        // First check products with show_in_hero = true AND image_url not empty
+        const flaggedHero = ((heroFlaggedRes.data || []) as Product[]).filter((p) =>
+          Boolean(p.image_url && p.image_url.trim())
+        );
+
+        if (flaggedHero.length > 0) {
+          setHeroProducts(flaggedHero);
+        } else {
+          // Fall back to featured products with images
+          const featuredWithImages = prods.filter(
+            (p) => p.is_featured && Boolean(p.image_url && p.image_url.trim())
+          );
+          setHeroProducts(featuredWithImages);
+        }
+      } catch (err) {
+        console.warn('Error fetching home page data:', err);
       } finally {
         setLoading(false);
       }
@@ -97,20 +158,36 @@ export default function HomePage() {
     fetchData();
   }, []);
 
-  const isUrdu = language === 'ur';
+  // Hero Autoplay (4 seconds, pause on hover/touch, respect reduced motion)
+  useEffect(() => {
+    if (heroProducts.length <= 1 || isHeroPaused) return;
 
-  // Filter products by selected category if changed
-  const displayedProducts =
+    const interval = setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % heroProducts.length);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [heroProducts.length, isHeroPaused]);
+
+  // Reset pagination when category changes
+  const handleCategorySelect = (slug: string) => {
+    setSelectedCategory(slug);
+    setVisibleCount(24);
+  };
+
+  // Filter products by selected category
+  const filteredProducts =
     selectedCategory === 'all'
-      ? featuredProducts
-      : featuredProducts.filter((p) => {
+      ? allProducts
+      : allProducts.filter((p) => {
           const cat = categories.find((c) => c.slug === selectedCategory);
           return p.category_id === cat?.id || p.slug.includes(selectedCategory);
         });
 
-  // Filter featured products that actually have real uploaded images (from DB)
-  const featuredWithImages = featuredProducts.filter((p) => Boolean(p.image_url));
-  const heroProduct = featuredWithImages.length > 0 ? featuredWithImages[0] : null;
+  const displayedProducts = filteredProducts.slice(0, visibleCount);
+  const hasMoreProducts = visibleCount < filteredProducts.length;
+
+  const currentHeroProduct = heroProducts[heroIndex] || null;
 
   return (
     <div className="overflow-x-hidden">
@@ -126,7 +203,7 @@ export default function HomePage() {
           }}
         />
 
-        {/* Dark Green Gradient Overlay (60% to 85% opacity for guaranteed contrast AA/AAA) */}
+        {/* Dark Green Gradient Overlay */}
         <div
           className="absolute inset-0"
           style={{
@@ -138,13 +215,13 @@ export default function HomePage() {
         <div className="container-app relative z-10 py-12 md:py-20 lg:py-24">
           <div
             className={`grid grid-cols-1 ${
-              heroProduct ? 'lg:grid-cols-12' : 'max-w-3xl mx-auto'
+              currentHeroProduct ? 'lg:grid-cols-12' : 'max-w-3xl mx-auto'
             } gap-8 lg:gap-10 items-center`}
           >
-            {/* Left Content (or centered if no image card or on mobile) */}
+            {/* Left Content */}
             <div
               className={`${
-                heroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
+                currentHeroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
               } flex flex-col items-center text-center space-y-5 animate-slide-up`}
             >
               {/* Badge */}
@@ -153,7 +230,7 @@ export default function HomePage() {
                 <span>100% PURE • HERITAGE ORGANIC</span>
               </div>
 
-              {/* Main Headline (clamp 2rem to 4.5rem in cream/white with subtle shadow, Healthy in light gold) */}
+              {/* Main Headline */}
               <h1
                 className="font-extrabold text-[#fdf8ec] tracking-tight leading-[1.08] hero-headline"
                 style={{
@@ -169,7 +246,7 @@ export default function HomePage() {
                 </span>
               </h1>
 
-              {/* Urdu Line in Gold at Larger Size (shown in hero as requested) */}
+              {/* Urdu Line in Gold at Larger Size */}
               <p
                 className="text-2xl sm:text-3xl md:text-4xl font-bold urdu text-[#c9a227] leading-relaxed"
                 style={{
@@ -186,11 +263,11 @@ export default function HomePage() {
                 {config.heroSubHeadline}
               </p>
 
-              {/* CTA Buttons (min 48px tall, hover & press animations, full width & stacked on mobile) */}
+              {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-3.5 w-full sm:w-auto pt-2">
                 <Link
                   href="/shop"
-                  className="btn-secondary w-full sm:w-auto h-12 sm:h-14 px-8 text-base font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
+                  className="btn-secondary w-full sm:w-auto h-12 sm:h-14 px-8 text-base font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer"
                 >
                   <span>{t.shopNow}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -202,7 +279,7 @@ export default function HomePage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-whatsapp w-full sm:w-auto h-12 sm:h-14 px-8 text-base font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
+                  className="btn-whatsapp w-full sm:w-auto h-12 sm:h-14 px-8 text-base font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer"
                 >
                   <FaWhatsapp size={20} />
                   <span>Order on WhatsApp</span>
@@ -225,52 +302,90 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right Column: Hero Image Card (ONLY shown if real product image exists in DB) */}
-            {heroProduct && (
-              <div className="lg:col-span-5 relative flex items-center justify-center pt-4 lg:pt-0 w-full">
-                <div className="relative w-full max-w-sm sm:max-w-md aspect-square animate-float">
+            {/* Right Column: Hero Slider Card (Admin Managed) */}
+            {currentHeroProduct && (
+              <div
+                className="lg:col-span-5 relative flex flex-col items-center justify-center pt-4 lg:pt-0 w-full"
+                onMouseEnter={() => setIsHeroPaused(true)}
+                onMouseLeave={() => setIsHeroPaused(false)}
+                onTouchStart={() => setIsHeroPaused(true)}
+                onTouchEnd={() => setIsHeroPaused(false)}
+              >
+                <div className="relative w-full max-w-sm sm:max-w-md aspect-square">
                   {/* Background glow circle */}
                   <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#c9a227]/30 to-[#22c55e]/20 blur-2xl transform scale-90" />
 
-                  {/* Main hero image container */}
-                  <div className="relative w-full h-full rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-black/20 backdrop-blur-xs">
-                    <img
-                      src={heroProduct.image_url!}
-                      alt={heroProduct.title}
-                      className="w-full h-full object-cover"
-                    />
+                  {/* Clickable Card Linking to Product */}
+                  <Link
+                    href={`/product/${currentHeroProduct.slug}`}
+                    className={`block relative w-full h-full rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-white p-4 group cursor-pointer ${
+                      prefersReducedMotion ? '' : 'transition-opacity duration-500'
+                    }`}
+                  >
+                    {/* The Whole Product Photo rendered via next/image object-contain */}
+                    <div className="relative w-full h-full">
+                      <Image
+                        key={currentHeroProduct.id}
+                        src={currentHeroProduct.image_url!}
+                        alt={currentHeroProduct.title}
+                        fill
+                        priority
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 420px"
+                        className="object-contain transition-transform duration-500 group-hover:scale-105"
+                      />
+                    </div>
 
-                    {/* Gradient bottom shadow */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/20" />
+                    {/* Gradient bottom shadow inside card */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none rounded-3xl" />
 
-                    {/* Floating badge matching the exact product record */}
-                    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-stone-100 flex items-center gap-2.5 z-20">
-                      <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-900 shrink-0">
-                        {getCategoryIcon(heroProduct.slug, 'w-4 h-4 text-emerald-900')}
+                    {/* Floating Product Name Badge (Full name wrapped onto up to 2 lines, never cut off with '...') */}
+                    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-lg border border-stone-100 flex items-center gap-2.5 z-20 max-w-[calc(100%-2rem)]">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-900 shrink-0">
+                        {getCategoryIcon(currentHeroProduct.slug, 'w-4 h-4 text-emerald-900')}
                       </div>
-                      <div className="text-left">
+                      <div className="text-left flex-1 min-w-0">
                         <p
-                          className="text-xs font-semibold text-emerald-950 leading-tight truncate max-w-[150px]"
+                          className="text-xs sm:text-sm font-bold text-emerald-950 leading-tight line-clamp-2"
                           style={{ color: '#022c22' }}
                         >
-                          {heroProduct.title}
+                          {isUrdu
+                            ? currentHeroProduct.title_ur || currentHeroProduct.title
+                            : currentHeroProduct.title}
                         </p>
                         <p
-                          className="text-[10px] text-emerald-800 font-medium leading-tight mt-0.5"
+                          className="text-[11px] text-emerald-800 font-semibold leading-tight mt-0.5"
                           style={{ color: '#065f46' }}
                         >
-                          {heroProduct.unit}
+                          {currentHeroProduct.unit}
                         </p>
                       </div>
                     </div>
 
                     {/* Price Badge */}
-                    <div className="absolute bottom-4 right-4 bg-[#14532d]/95 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-bold text-[#fdf8ec] border border-[#c9a227]/40 flex items-center gap-1.5">
+                    <div className="absolute bottom-4 right-4 bg-[#14532d]/95 backdrop-blur-md px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-[#fdf8ec] border border-[#c9a227]/40 flex items-center gap-1.5 shadow-lg z-20">
                       <Sparkles className="w-3.5 h-3.5 text-[#e8c547]" />
-                      <span>{formatPrice(heroProduct.price)}</span>
+                      <span>{formatPrice(currentHeroProduct.price)}</span>
                     </div>
-                  </div>
+                  </Link>
                 </div>
+
+                {/* Tappable Pagination Dots */}
+                {heroProducts.length > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4 z-20">
+                    {heroProducts.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setHeroIndex(idx)}
+                        className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                          heroIndex === idx
+                            ? 'w-6 bg-[#e8c547]'
+                            : 'w-2 bg-white/50 hover:bg-white/80'
+                        }`}
+                        aria-label={`Go to slide ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -278,15 +393,15 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          2. CATEGORY BAR (One horizontally scrolling row with snap, no wrapping on mobile)
+          2. CATEGORY BAR (Horizontally scrolling row with snap)
           ========================================================= */}
       <section className="py-4 sm:py-6 bg-white border-b border-stone-200/70 sticky top-14 sm:top-16 z-30 shadow-xs">
         <div className="container-app">
           <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory flex-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
             {/* "All" Chip */}
             <button
-              onClick={() => setSelectedCategory('all')}
-              className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] ${
+              onClick={() => handleCategorySelect('all')}
+              className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
                   : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
@@ -302,8 +417,8 @@ export default function HomePage() {
               return (
                 <button
                   key={cat.id}
-                  onClick={() => setSelectedCategory(cat.slug)}
-                  className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] ${
+                  onClick={() => handleCategorySelect(cat.slug)}
+                  className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${
                     isActive
                       ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
                       : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
@@ -321,7 +436,7 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          3. FEATURED PRODUCTS (2 cols mobile, 3 tablet, 4 desktop + intentional last card)
+          3. OUR PRODUCTS (Replaces Featured Products & full catalog tile; lists ALL active products)
           ========================================================= */}
       <section className="py-12 md:py-16 bg-[#fdf8ec]">
         <div className="container-app">
@@ -335,12 +450,12 @@ export default function HomePage() {
                 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#14532d]"
                 style={{ fontFamily: 'var(--font-heading)' }}
               >
-                {t.featuredProducts}
+                {t.ourProducts}
               </h2>
             </div>
             <Link
               href="/shop"
-              className="inline-flex items-center gap-2 text-sm font-bold text-[#14532d] hover:text-[#166534] transition-colors group"
+              className="inline-flex items-center gap-2 text-sm font-bold text-[#14532d] hover:text-[#166534] transition-colors group cursor-pointer"
             >
               <span>{t.allProducts}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -354,45 +469,60 @@ export default function HomePage() {
                 <ProductSkeleton key={i} />
               ))}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
-              {displayedProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-
-              {/* Intentional "View Full Catalog" card on desktop/mobile so the grid looks finished */}
-              <Link
-                href="/shop"
-                className="rounded-2xl border-2 border-dashed border-[#c9a227]/60 bg-white/70 hover:bg-white p-5 flex flex-col items-center justify-center text-center transition-all hover:shadow-md group min-h-[220px]"
+          ) : displayedProducts.length === 0 ? (
+            /* Friendly Empty State per Category */
+            <div className="p-12 text-center bg-white rounded-2xl border border-stone-200/80 shadow-xs max-w-md mx-auto">
+              <div className="w-16 h-16 rounded-full bg-emerald-50 text-[#14532d] flex items-center justify-center mx-auto mb-3">
+                <Leaf className="w-8 h-8 text-[#14532d]" />
+              </div>
+              <h3 className="text-base font-bold text-[#2d1f14]">
+                {isUrdu ? 'اس زمرے میں کوئی مصنوعات نہیں ہیں' : 'No products found in this category'}
+              </h3>
+              <p className="text-xs text-stone-500 mt-1">
+                {isUrdu
+                  ? 'دیگر زمرہ جات دیکھیں یا تمام مصنوعات پر واپس جائیں۔'
+                  : 'Check out our other organic items or clear the category filter.'}
+              </p>
+              <button
+                onClick={() => handleCategorySelect('all')}
+                className="btn-primary mt-4 h-10 px-6 text-xs cursor-pointer"
               >
-                <div className="w-12 h-12 rounded-full bg-[#fdf8ec] border border-[#c9a227]/40 flex items-center justify-center text-[#14532d] mb-3 group-hover:scale-110 transition-transform">
-                  <ShoppingBag className="w-6 h-6 text-[#14532d]" />
-                </div>
-                <h3
-                  className="text-base font-bold text-[#14532d] mb-1"
-                  style={{ fontFamily: 'var(--font-heading)' }}
-                >
-                  View Full Catalog
-                </h3>
-                <p className="text-xs text-stone-500 mb-3 max-w-[150px]">
-                  Explore all organic grains, pure oils, desi ghee & honey
-                </p>
-                <span className="text-xs font-bold text-[#c9a227] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                  Browse All Products <ArrowRight className="w-3.5 h-3.5" />
-                </span>
-              </Link>
+                {t.allCategories}
+              </button>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+                {displayedProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+
+              {/* Show More Button after first 24 */}
+              {hasMoreProducts && (
+                <div className="mt-10 flex flex-col items-center justify-center gap-2">
+                  <button
+                    onClick={() => setVisibleCount((prev) => prev + 24)}
+                    className="btn-secondary h-12 px-8 text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <span>{t.showMore}</span>
+                    <span className="text-xs font-normal opacity-80">
+                      ({filteredProducts.length - visibleCount} more)
+                    </span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
 
       {/* =========================================================
-          4. TRUST STRIP (Dark green background + cream text, 2x2 grid on mobile, 1 col <360px)
+          4. TRUST STRIP (Dark green background + cream text)
           ========================================================= */}
       <section className="on-dark py-12 md:py-16 bg-[#14532d] text-[#fdf8ec]">
         <div className="container-app">
           <div className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Card 1 */}
             <div className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
               <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#c9a227] text-[#14532d] flex items-center justify-center flex-shrink-0 shadow-md">
                 <Leaf className="w-5 h-5 text-[#14532d]" />
@@ -410,7 +540,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Card 2 */}
             <div className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
               <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#c9a227] text-[#14532d] flex items-center justify-center flex-shrink-0 shadow-md">
                 <Award className="w-5 h-5 text-[#14532d]" />
@@ -428,7 +557,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Card 3 */}
             <div className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
               <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#c9a227] text-[#14532d] flex items-center justify-center flex-shrink-0 shadow-md">
                 <ShieldCheck className="w-5 h-5 text-[#14532d]" />
@@ -441,12 +569,11 @@ export default function HomePage() {
                   Healthy Lifestyle
                 </h3>
                 <p className="text-xs text-[#f5edd5] leading-relaxed">
-                  Nutrient-dense natural staples to nourish your family's health every day.
+                  Nutrient-dense natural staples to nourish your family&apos;s health every day.
                 </p>
               </div>
             </div>
 
-            {/* Card 4 */}
             <div className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
               <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#c9a227] text-[#14532d] flex items-center justify-center flex-shrink-0 shadow-md">
                 <Truck className="w-5 h-5 text-[#14532d]" />
@@ -468,7 +595,7 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          5. WHY CHOOSE DESI HUB (2x2 grid on mobile, 1 col <360px)
+          5. WHY CHOOSE DESI HUB
           ========================================================= */}
       <section className="py-12 md:py-20 bg-white">
         <div className="container-app">
@@ -488,7 +615,6 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Pillar 1 */}
             <div className="p-5 sm:p-6 rounded-2xl bg-[#fdf8ec] border border-stone-200/60 hover:shadow-md transition-all text-center flex flex-col items-center">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-100 flex items-center justify-center mb-3 text-[#14532d]">
                 <Wheat className="w-6 h-6 text-[#14532d]" />
@@ -501,7 +627,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Pillar 2 */}
             <div className="p-5 sm:p-6 rounded-2xl bg-[#fdf8ec] border border-stone-200/60 hover:shadow-md transition-all text-center flex flex-col items-center">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-100 flex items-center justify-center mb-3 text-amber-800">
                 <ShieldCheck className="w-6 h-6 text-amber-800" />
@@ -514,7 +639,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Pillar 3 */}
             <div className="p-5 sm:p-6 rounded-2xl bg-[#fdf8ec] border border-stone-200/60 hover:shadow-md transition-all text-center flex flex-col items-center">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-100 flex items-center justify-center mb-3 text-[#14532d]">
                 <PackageCheck className="w-6 h-6 text-[#14532d]" />
@@ -527,7 +651,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Pillar 4 */}
             <div className="p-5 sm:p-6 rounded-2xl bg-[#fdf8ec] border border-stone-200/60 hover:shadow-md transition-all text-center flex flex-col items-center">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-100 flex items-center justify-center mb-3 text-amber-800">
                 <Truck className="w-6 h-6 text-amber-800" />
@@ -544,7 +667,7 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          6. HOW TO ORDER (Stacked steps on mobile, 3 cols desktop)
+          6. HOW TO ORDER
           ========================================================= */}
       <section className="py-12 md:py-20 bg-[#fdf8ec]">
         <div className="container-app">
@@ -564,7 +687,6 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 relative">
-            {/* Step 1 */}
             <div className="card p-5 sm:p-7 bg-white border border-stone-200/80 text-center flex flex-col items-center relative shadow-xs">
               <div className="w-12 h-12 rounded-full bg-[#14532d] text-[#e8c547] flex items-center justify-center mb-3 shadow-md">
                 <ShoppingBag className="w-5 h-5 text-[#e8c547]" />
@@ -578,7 +700,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Step 2 */}
             <div className="card p-5 sm:p-7 bg-white border border-stone-200/80 text-center flex flex-col items-center relative shadow-xs">
               <div className="w-12 h-12 rounded-full bg-[#c9a227] text-[#14532d] flex items-center justify-center mb-3 shadow-md">
                 <Phone className="w-5 h-5 text-[#14532d]" />
@@ -592,7 +713,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Step 3 */}
             <div className="card p-5 sm:p-7 bg-white border border-stone-200/80 text-center flex flex-col items-center relative shadow-xs">
               <div className="w-12 h-12 rounded-full bg-[#14532d] text-[#e8c547] flex items-center justify-center mb-3 shadow-md">
                 <Truck className="w-5 h-5 text-[#e8c547]" />
@@ -610,7 +730,85 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          7. SINGLE DELIVERY BANNER (Only section above the footer)
+          7. CUSTOMER FEEDBACK (Only rendered if active testimonials exist in DB)
+          ========================================================= */}
+      {testimonials.length > 0 && (
+        <section className="py-12 md:py-20 bg-white border-t border-stone-200/60">
+          <div className="container-app">
+            <div className="text-center max-w-xl mx-auto mb-10">
+              <span className="text-xs font-bold text-[#c9a227] tracking-widest uppercase block mb-1">
+                {isUrdu ? 'اصلی جائزے' : 'Verified Reviews'}
+              </span>
+              <h2
+                className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#14532d] mb-2"
+                style={{ fontFamily: 'var(--font-heading)' }}
+              >
+                {t.whatCustomersSay}
+              </h2>
+              <p className="text-xs sm:text-sm text-stone-600">
+                Real experiences shared by our valued patrons across Islamabad and Rawalpindi.
+              </p>
+            </div>
+
+            {/* Mobile: Horizontally scrollable snap carousel | Desktop: 3-column grid */}
+            <div className="flex md:grid md:grid-cols-3 gap-4 sm:gap-6 overflow-x-auto hide-scrollbar snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0">
+              {testimonials.map((item) => (
+                <div
+                  key={item.id}
+                  className="w-[84vw] sm:w-[340px] md:w-auto shrink-0 snap-center bg-[#fdf8ec] rounded-2xl p-6 border border-stone-200/80 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Star Rating & Quote mark */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-1 text-amber-500">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={16}
+                            className={
+                              i < item.rating
+                                ? 'fill-amber-400 text-amber-500'
+                                : 'text-stone-300'
+                            }
+                          />
+                        ))}
+                      </div>
+                      <Quote className="w-5 h-5 text-[#c9a227]/40 rotate-180" />
+                    </div>
+
+                    {/* Review text */}
+                    <p className="text-sm text-stone-700 leading-relaxed italic mb-6">
+                      &quot;{item.message}&quot;
+                    </p>
+                  </div>
+
+                  {/* Customer author info */}
+                  <div className="pt-4 border-t border-[#e6c35c]/30 flex items-center justify-between">
+                    <div>
+                      <h4
+                        className="text-sm font-bold text-[#14532d]"
+                        style={{ fontFamily: 'var(--font-heading)' }}
+                      >
+                        {item.customer_name}
+                      </h4>
+                      <p className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
+                        <MapPin size={12} className="text-[#8a6810]" />
+                        <span>{item.city}</span>
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                      Verified
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* =========================================================
+          8. DELIVERY BANNER (Directly above the footer)
           ========================================================= */}
       <section className="on-dark py-8 sm:py-10 bg-[#14532d] border-t-2 border-[#c9a227]/40 text-[#fdf8ec]">
         <div className="container-app">

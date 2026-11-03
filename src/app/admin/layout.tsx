@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useFormStatus } from 'react-dom';
 import {
   FiGrid,
   FiShoppingBag,
@@ -16,16 +17,53 @@ import {
   FiX,
   FiShield,
   FiKey,
+  FiMessageSquare,
 } from 'react-icons/fi';
 import config from '@/lib/config';
-import { adminLogoutAction, getNewOrdersCountAction } from './actions';
-import toast, { Toaster } from 'react-hot-toast';
+import { logoutAction, getNewOrdersCountAction } from './actions';
+import { Toaster } from 'react-hot-toast';
+
+function LogoutSubmitButton({
+  variant = 'drawer',
+}: {
+  variant?: 'header' | 'drawer';
+}) {
+  const { pending } = useFormStatus();
+
+  if (variant === 'header') {
+    return (
+      <button
+        type="submit"
+        disabled={pending}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors disabled:opacity-50 cursor-pointer"
+        aria-label="Log out of admin portal"
+        title="Log out"
+      >
+        <FiLogOut size={14} />
+        <span>{pending ? 'Logging out...' : 'Log out'}</span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
+      aria-label="Log out of admin portal"
+    >
+      <FiLogOut size={14} />
+      <span>{pending ? 'Logging out...' : 'Log out'}</span>
+    </button>
+  );
+}
 
 const navItems = [
   { name: 'Dashboard', href: '/admin', icon: FiGrid },
   { name: 'Orders', href: '/admin/orders', icon: FiShoppingBag, hasBadge: true },
   { name: 'Products', href: '/admin/products', icon: FiPackage },
   { name: 'Categories', href: '/admin/categories', icon: FiTag },
+  { name: 'Feedback', href: '/admin/feedback', icon: FiMessageSquare },
   { name: 'Stalls & QR', href: '/admin/stalls', icon: FiMapPin },
   { name: 'Change Password', href: '/admin/change-password', icon: FiKey },
   { name: 'Settings', href: '/admin/settings', icon: FiSettings },
@@ -33,7 +71,6 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [newOrdersCount, setNewOrdersCount] = useState<number>(0);
 
@@ -53,17 +90,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const interval = setInterval(loadNewOrdersBadge, 45000);
     return () => clearInterval(interval);
   }, [pathname]);
-
-  const handleLogout = async () => {
-    try {
-      await adminLogoutAction();
-      toast.success('Signed out successfully');
-      router.push('/admin/login');
-      router.refresh();
-    } catch {
-      router.push('/admin/login');
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900 font-sans">
@@ -98,9 +124,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           )}
 
+          {/* Mobile Header Logout Form */}
+          <form action={logoutAction}>
+            <LogoutSubmitButton variant="header" />
+          </form>
+
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             aria-label="Toggle Navigation"
           >
             {mobileMenuOpen ? <FiX size={20} /> : <FiMenu size={20} />}
@@ -143,7 +174,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Close button inside mobile drawer */}
             <button
               onClick={() => setMobileMenuOpen(false)}
-              className="md:hidden p-2 text-slate-400 hover:text-slate-700 rounded-lg"
+              className="md:hidden p-2 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
             >
               <FiX size={20} />
             </button>
@@ -208,13 +239,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </span>
           </Link>
 
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-          >
-            <FiLogOut size={14} />
-            Sign Out
-          </button>
+          {/* Sidebar / Mobile Menu Logout Form */}
+          <form action={logoutAction}>
+            <LogoutSubmitButton variant="drawer" />
+          </form>
         </div>
       </aside>
 

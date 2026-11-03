@@ -11,6 +11,7 @@ export interface UploadImageResult {
 
 /**
  * Validates image type and size, compresses client-side to WebP under 500 KB,
+ * keeps original aspect ratio (max 1200 px on the longest side, never crops),
  * and uploads to the Supabase 'product-images' bucket with a unique file name.
  */
 export async function uploadProductImage(file: File): Promise<UploadImageResult> {
@@ -19,23 +20,23 @@ export async function uploadProductImage(file: File): Promise<UploadImageResult>
   if (!ALLOWED_TYPES.includes(fileType)) {
     return {
       url: null,
-      error: 'Invalid file format. Only JPG, PNG, and WebP images are allowed.',
+      error: 'Invalid file format. Please upload a clear photo in JPG, PNG, or WebP format.',
     };
   }
 
-  // 2. Validate original size
+  // 2. Validate original size before compression
   if (file.size > MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024) {
     return {
       url: null,
-      error: `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed before compression is 10 MB.`,
+      error: `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select an image under 10 MB.`,
     };
   }
 
   try {
-    // 3. Compress to WebP < 500 KB (bucket limit is 1 MB)
+    // 3. Compress to WebP < 500 KB and max 1200 px on the longest side without cropping
     const compressionOptions = {
-      maxSizeMB: 0.45, // strictly under 500 KB
-      maxWidthOrHeight: 1600,
+      maxSizeMB: 0.48, // strictly under 500 KB
+      maxWidthOrHeight: 1200, // max 1200 px on longest side
       useWebWorker: true,
       fileType: 'image/webp',
     };
@@ -49,11 +50,11 @@ export async function uploadProductImage(file: File): Promise<UploadImageResult>
       processedFile = file;
     }
 
-    // Double check compressed size does not exceed 1 MB
+    // Double check size does not exceed 1 MB
     if (processedFile.size > 1 * 1024 * 1024) {
       return {
         url: null,
-        error: 'Image is larger than 1 MB after compression. Please use a smaller image.',
+        error: 'Image is larger than 1 MB. Please use a smaller photo or compress it first.',
       };
     }
 
@@ -102,12 +103,18 @@ export async function deleteProductImage(imageUrl: string): Promise<boolean> {
     const parts = imageUrl.split('/product-images/');
     if (!parts[1]) return false;
 
-    const path = decodeURIComponent(parts[1].split('?')[0]);
+    const filePath = decodeURIComponent(parts[1].split('?')[0]);
     const supabase = createClient();
-    const { error } = await supabase.storage.from('product-images').remove([path]);
+    const { error } = await supabase.storage.from('product-images').remove([filePath]);
 
-    return !error;
-  } catch {
+    if (error) {
+      console.warn('Image removal warning:', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Image delete exception:', err);
     return false;
   }
 }

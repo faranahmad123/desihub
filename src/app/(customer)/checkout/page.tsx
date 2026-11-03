@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,18 +8,17 @@ import {
   ShoppingBag,
   MapPin,
   User,
-  Phone,
-  FileText,
   CheckCircle,
   AlertCircle,
   Truck,
   ShieldCheck,
+  FileText,
+  Info,
 } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { useLanguageStore, translations } from '@/store/language';
 import { createClient } from '@/lib/supabase/client';
 import { placeOrderAction } from './actions';
-import config from '@/lib/config';
 import { formatPrice, getStallFromUrl } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -31,6 +30,7 @@ export default function CheckoutPage() {
   const isUrdu = language === 'ur';
 
   const [loading, setLoading] = useState(false);
+  const [freeDeliveryCities, setFreeDeliveryCities] = useState<string>('Islamabad, Rawalpindi');
 
   const [form, setForm] = useState({
     name: '',
@@ -43,33 +43,66 @@ export default function CheckoutPage() {
   const [touched, setTouched] = useState({
     name: false,
     phone: false,
+    city: false,
     address: false,
   });
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function loadFreeDeliveryCities() {
+      try {
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'free_delivery_cities')
+          .maybeSingle();
+
+        if (data?.value) {
+          setFreeDeliveryCities(data.value);
+        }
+      } catch (err) {
+        console.warn('Failed to load free_delivery_cities:', err);
+      }
+    }
+    loadFreeDeliveryCities();
+  }, []);
 
   const total = getTotal();
 
   // Validation logic
   const isNameValid = form.name.trim().length >= 3;
-  // Clean phone removes spaces and hyphens
   const cleanPhone = form.phone.replace(/[\s-]/g, '');
   const isPhoneValid = /^03[0-9]{9}$/.test(cleanPhone);
+  const trimmedCity = form.city.trim();
+  const isCityValid = trimmedCity.length >= 2 && trimmedCity.length <= 60;
   const isAddressValid = form.address.trim().length >= 8;
 
-  const isFormValid = isNameValid && isPhoneValid && isAddressValid;
+  const isFormValid = isNameValid && isPhoneValid && isCityValid && isAddressValid;
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleBlur = (field: 'name' | 'phone' | 'address') => {
+  const handleBlur = (field: 'name' | 'phone' | 'city' | 'address') => {
     setTouched({ ...touched, [field]: true });
   };
 
+  // Helper note
+  const freeCitiesList = freeDeliveryCities
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const freeCitiesFormatted = freeCitiesList.join(' & ');
+
+  const deliveryNote = isUrdu
+    ? `${freeCitiesFormatted} میں مفت ہوم ڈیلیوری۔ دیگر شہروں کے لیے ہم واٹس ایپ پر ڈیلیوری کی تصدیق کریں گے۔`
+    : `Free home delivery in ${freeCitiesFormatted}. For other cities we will confirm delivery on WhatsApp.`;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTouched({ name: true, phone: true, address: true });
+    setTouched({ name: true, phone: true, city: true, address: true });
 
     if (!isFormValid) {
       toast.error('Please fix the errors in the form before proceeding.', {
@@ -87,7 +120,7 @@ export default function CheckoutPage() {
       const res = await placeOrderAction({
         customer_name: form.name.trim(),
         customer_phone: cleanPhone,
-        customer_city: form.city,
+        customer_city: trimmedCity,
         customer_address: form.address.trim(),
         customer_notes: form.notes.trim() || null,
         stall_slug: stallSlug,
@@ -109,10 +142,10 @@ export default function CheckoutPage() {
       clearCart();
       router.push(
         `/order-success?order=${res.orderNumber}&name=${encodeURIComponent(
-          form.name
+          form.name.trim()
         )}&phone=${encodeURIComponent(cleanPhone)}&address=${encodeURIComponent(
-          form.address
-        )}&city=${encodeURIComponent(form.city)}&total=${res.total}&items=${encodeURIComponent(
+          form.address.trim()
+        )}&city=${encodeURIComponent(trimmedCity)}&total=${res.total}&items=${encodeURIComponent(
           JSON.stringify(items.map((i) => ({ t: i.product.title, q: i.quantity, p: i.product.price })))
         )}`
       );
@@ -155,7 +188,7 @@ export default function CheckoutPage() {
       {/* Back Button */}
       <button
         onClick={() => router.back()}
-        className="inline-flex items-center gap-2 text-sm font-bold mb-6 text-[#14532d] hover:text-[#166534] transition-colors"
+        className="inline-flex items-center gap-2 text-sm font-bold mb-6 text-[#14532d] hover:text-[#166534] transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>{isUrdu ? 'واپس جائیں' : 'Back to Cart'}</span>
@@ -215,6 +248,7 @@ export default function CheckoutPage() {
               <input
                 type="text"
                 name="name"
+                autoComplete="name"
                 value={form.name}
                 onChange={handleChange}
                 onBlur={() => handleBlur('name')}
@@ -227,7 +261,7 @@ export default function CheckoutPage() {
               />
             </div>
 
-            {/* Phone Number (type="tel" inputMode="tel") */}
+            {/* Phone Number */}
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-sm font-semibold text-stone-800">
@@ -250,6 +284,7 @@ export default function CheckoutPage() {
               <input
                 type="tel"
                 inputMode="tel"
+                autoComplete="tel"
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
@@ -279,20 +314,55 @@ export default function CheckoutPage() {
           </h2>
 
           <div className="space-y-4">
-            {/* City */}
+            {/* City with Free-Text + Datalist Suggestions */}
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                {t.city} <span className="text-rose-600">*</span>
-              </label>
-              <select
+              <div className="flex justify-between items-center mb-1.5">
+                <label htmlFor="city-input" className="block text-sm font-semibold text-stone-800">
+                  {t.city} <span className="text-rose-600">*</span>
+                </label>
+                {touched.city && (
+                  <span className="text-xs font-medium">
+                    {isCityValid ? (
+                      <span className="text-emerald-700 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Valid
+                      </span>
+                    ) : (
+                      <span className="text-rose-600 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" /> 2 to 60 characters
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <input
+                id="city-input"
+                type="text"
                 name="city"
+                list="city-suggestions"
+                autoComplete="address-level2"
+                required
                 value={form.city}
                 onChange={handleChange}
-                className="w-full h-12 px-4 rounded-xl border border-stone-300 bg-stone-50/50 focus:bg-white focus:border-[#14532d] focus:ring-2 focus:ring-[#14532d]/15 text-sm font-medium outline-none transition-all cursor-pointer"
-              >
-                <option value="Islamabad">Islamabad (Free Home Delivery)</option>
-                <option value="Rawalpindi">Rawalpindi (Free Home Delivery)</option>
-              </select>
+                onBlur={() => handleBlur('city')}
+                placeholder="Enter your city (e.g. Islamabad, Rawalpindi, Lahore)"
+                className={`w-full h-12 px-4 rounded-xl border text-sm transition-all outline-none ${
+                  touched.city && !isCityValid
+                    ? 'border-rose-400 bg-rose-50/30 focus:border-rose-600 focus:ring-2 focus:ring-rose-200'
+                    : 'border-stone-300 bg-stone-50/50 focus:bg-white focus:border-[#14532d] focus:ring-2 focus:ring-[#14532d]/15'
+                }`}
+              />
+
+              <datalist id="city-suggestions">
+                <option value="Islamabad" />
+                <option value="Rawalpindi" />
+              </datalist>
+
+              {/* Delivery Note under City Field */}
+              <div className="mt-2 flex items-start gap-1.5 text-xs text-stone-600 bg-[#fdf8ec] p-2.5 rounded-xl border border-[#c9a227]/30">
+                <Info className="w-4 h-4 text-[#8a6810] shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{deliveryNote}</span>
+              </div>
             </div>
 
             {/* Street Address */}
@@ -317,6 +387,7 @@ export default function CheckoutPage() {
               </div>
               <textarea
                 name="address"
+                autoComplete="street-address"
                 value={form.address}
                 onChange={handleChange}
                 onBlur={() => handleBlur('address')}
@@ -375,7 +446,7 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* CRITICAL REQUIREMENT: Short Order Summary directly above the Place Order button */}
+        {/* Order Summary directly above the Place Order button */}
         <div className="bg-[#fdf8ec] rounded-2xl p-5 border border-[#e6c35c]/50 shadow-xs">
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#e6c35c]/40">
             <span className="text-xs font-bold uppercase tracking-wider text-[#8a6810] flex items-center gap-1.5">
@@ -419,7 +490,7 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Place Order Button (48px+ tall) */}
+        {/* Place Order Button */}
         <button
           type="submit"
           disabled={loading}

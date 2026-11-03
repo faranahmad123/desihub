@@ -20,6 +20,7 @@ export interface StoreSettings {
   email: string;
   facebook: string;
   instagram: string;
+  instagramUrl?: string;
   tiktok: string;
   deliveryMessage: string;
 }
@@ -37,6 +38,7 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
     email: 'desihub224@gmail.com',
     facebook: 'https://facebook.com/desihub',
     instagram: 'https://instagram.com/desihub',
+    instagramUrl: 'https://instagram.com/desihub',
     tiktok: 'https://tiktok.com/@desihub',
     deliveryMessage: 'Free Home Delivery in Islamabad & Rawalpindi',
   };
@@ -53,6 +55,8 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
         }
       });
 
+      const insta = map.instagram_url || map.instagram || fallback.instagram;
+
       return {
         brandName: map.brand_name || fallback.brandName,
         taglineUrdu: map.tagline_urdu || fallback.taglineUrdu,
@@ -63,7 +67,8 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
         // Accept store_email or email from settings table
         email: map.store_email || map.email || fallback.email,
         facebook: map.facebook || fallback.facebook,
-        instagram: map.instagram || fallback.instagram,
+        instagram: insta,
+        instagramUrl: insta,
         tiktok: map.tiktok || fallback.tiktok,
         deliveryMessage: map.delivery_message || fallback.deliveryMessage,
       };
@@ -90,7 +95,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
       <main className="flex-1">{children}</main>
       <Footer initialSettings={settings} />
       <CartDrawer />
-      <WhatsAppButton />
+      <WhatsAppButton initialInstagramUrl={settings.instagramUrl} />
       <StallTracker />
     </>
   );

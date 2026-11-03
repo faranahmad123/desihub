@@ -28,6 +28,11 @@ export async function placeOrderAction(input: PlaceOrderInput) {
     return { error: 'Please enter a valid Pakistani mobile number (e.g. 03001234567).' };
   }
 
+  const city = input.customer_city ? input.customer_city.trim() : '';
+  if (city.length < 2 || city.length > 60) {
+    return { error: 'Please enter a valid city name (between 2 and 60 characters).' };
+  }
+
   const address = input.customer_address ? input.customer_address.trim() : '';
   if (address.length < 8) {
     return { error: 'Please enter a complete delivery address (at least 8 characters).' };
@@ -51,7 +56,7 @@ export async function placeOrderAction(input: PlaceOrderInput) {
     const { data, error } = await supabase.rpc('place_order', {
       p_name: name,
       p_phone: cleanPhone,
-      p_city: input.customer_city || 'Islamabad',
+      p_city: city,
       p_address: address,
       p_notes: input.customer_notes ? input.customer_notes.trim() : null,
       p_items: input.items.map((i) => ({

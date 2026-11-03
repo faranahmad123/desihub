@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { X, Minus, Plus, Trash2, ShoppingBag, ArrowRight, ShieldCheck, Leaf } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { useLanguageStore, translations } from '@/store/language';
@@ -96,14 +97,18 @@ export default function CartDrawer() {
                 key={item.product.id}
                 className="flex gap-3 p-3 rounded-2xl bg-[#fdf8ec] border border-stone-200/70 shadow-2xs hover:border-[#c9a227]/40 transition-colors"
               >
-                {/* Product Thumbnail or Branded Placeholder */}
-                <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl bg-white overflow-hidden flex-shrink-0 border border-stone-200/60 flex items-center justify-center">
+                {/* Product Thumbnail (square box, cream bg, object-contain, never cropped) */}
+                <div className="w-18 h-18 sm:w-20 sm:h-20 aspect-square rounded-xl bg-white overflow-hidden flex-shrink-0 border border-stone-200/60 p-1 relative flex items-center justify-center">
                   {item.product.image_url ? (
-                    <img
-                      src={item.product.image_url}
-                      alt={item.product.title}
-                      className="w-full h-full object-cover"
-                    />
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={item.product.image_url}
+                        alt={item.product.title}
+                        fill
+                        sizes="80px"
+                        className="object-contain"
+                      />
+                    </div>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-[#fdf8ec] p-1">
                       <Leaf className="w-6 h-6 text-[#14532d]" />
