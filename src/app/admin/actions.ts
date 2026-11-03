@@ -174,6 +174,23 @@ export async function adminChangePasswordAction(newPassword: string) {
   }
 }
 
+export type ActionResponse<T = Record<string, any>> = {
+  success?: boolean;
+  error?: string;
+} & T;
+
+function handleActionError(err: any): { success: false; error: string } {
+  const msg = err?.message || String(err || '');
+  if (msg.toLowerCase().includes('schema cache')) {
+    console.error('[schema-cache-error]', err);
+    return {
+      success: false,
+      error: 'The database needs the latest update. Run the newest SQL file in Supabase, then try again.',
+    };
+  }
+  return { success: false, error: msg || 'An unexpected error occurred' };
+}
+
 /**
  * Save Product Server Action (Create or Update)
  * Validates admin status and immediately revalidates customer storefront cache.
@@ -195,7 +212,7 @@ export async function saveProductAction(payload: {
   show_in_hero?: boolean;
   is_active: boolean;
   sort_order?: number;
-}) {
+}): Promise<{ success?: boolean; error?: string; product?: any }> {
   await requireAdmin();
 
   if (!payload.title || payload.price < 0) {
@@ -203,6 +220,23 @@ export async function saveProductAction(payload: {
   }
 
   const supabase = await createServerSupabaseClient();
+
+  // Enforce maximum of 6 hot-selling products in hero slider
+  if (payload.show_in_hero) {
+    let countQuery = supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('show_in_hero', true);
+
+    if (payload.id) {
+      countQuery = countQuery.neq('id', payload.id);
+    }
+
+    const { count: heroCount, error: countErr } = await countQuery;
+    if (!countErr && typeof heroCount === 'number' && heroCount >= 6) {
+      return { error: '6 hot-selling products are already selected. Turn one off first.' };
+    }
+  }
 
   try {
     let result;
@@ -238,14 +272,17 @@ export async function saveProductAction(payload: {
 
     return { success: true, product: result };
   } catch (err: any) {
-    return { error: err.message || 'Failed to save product' };
+    return handleActionError(err);
   }
 }
 
 /**
  * Delete Product Server Action
  */
-export async function deleteProductAction(productId: string, imageUrl?: string | null) {
+export async function deleteProductAction(
+  productId: string,
+  imageUrl?: string | null
+): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -271,7 +308,7 @@ export async function deleteProductAction(productId: string, imageUrl?: string |
 
     return { success: true };
   } catch (err: any) {
-    return { error: err.message || 'Failed to delete product' };
+    return handleActionError(err);
   }
 }
 
@@ -282,17 +319,31 @@ export async function toggleProductFieldAction(
   productId: string,
   field: 'in_stock' | 'is_featured' | 'is_active' | 'show_in_hero',
   value: boolean
-) {
+): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
+
+  // Enforce maximum of 6 hot-selling products when enabling show_in_hero
+  if (field === 'show_in_hero' && value === true) {
+    const { count: heroCount, error: countErr } = await supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('show_in_hero', true)
+      .neq('id', productId);
+
+    if (!countErr && typeof heroCount === 'number' && heroCount >= 6) {
+      return { error: '6 hot-selling products are already selected. Turn one off first.' };
+    }
+  }
+
   const { error } = await supabase
     .from('products')
     .update({ [field]: value })
     .eq('id', productId);
 
   if (error) {
-    return { error: error.message };
+    return handleActionError(error);
   }
 
   revalidatePath('/', 'layout');
@@ -308,7 +359,7 @@ export async function toggleProductFieldAction(
 export async function updateOrderStatusAction(
   orderId: string,
   status: 'new' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled'
-) {
+): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -318,9 +369,11 @@ export async function updateOrderStatusAction(
     .eq('id', orderId);
 
   if (error) {
-    return { error: error.message };
+    return handleActionError(error);
   }
 
+  revalidatePath('/', 'layout');
+  revalidatePath('/admin/orders');
   return { success: true };
 }
 
@@ -328,7 +381,7 @@ export async function updateOrderStatusAction(
  * Delete Order Server Action
  * Securely deletes an order by ID (with cascade cleanup on order_items).
  */
-export async function deleteOrderAction(orderId: string) {
+export async function deleteOrderAction(orderId: string): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -338,9 +391,10 @@ export async function deleteOrderAction(orderId: string) {
     .eq('id', orderId);
 
   if (error) {
-    return { error: error.message };
+    return handleActionError(error);
   }
 
+  revalidatePath('/', 'layout');
   revalidatePath('/admin/orders');
   return { success: true };
 }
@@ -368,7 +422,9 @@ export async function getNewOrdersCountAction(): Promise<number> {
  * Updates key/value pairs in the settings table and purges layout cache.
  * Preserves is_public flag so public settings remain accessible to storefront visitors.
  */
-export async function saveSettingsAction(settings: Record<string, string>) {
+export async function saveSettingsAction(
+  settings: Record<string, string>
+): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -440,7 +496,7 @@ export async function saveSettingsAction(settings: Record<string, string>) {
     return { success: true };
   } catch (err: any) {
     console.error('Failed to save settings:', err);
-    return { error: err.message || 'Failed to save settings to database' };
+    return handleActionError(err);
   }
 }
 
@@ -461,7 +517,7 @@ export interface TestimonialInput {
   sort_order?: number;
 }
 
-export async function saveTestimonialAction(payload: TestimonialInput) {
+export async function saveTestimonialAction(payload: TestimonialInput): Promise<ActionResponse> {
   await requireAdmin();
 
   const customerName = payload.customer_name ? payload.customer_name.trim() : '';
@@ -519,11 +575,11 @@ export async function saveTestimonialAction(payload: TestimonialInput) {
     return { success: true };
   } catch (err: any) {
     console.error('Failed to save testimonial:', err);
-    return { error: err.message || 'Failed to save feedback' };
+    return handleActionError(err);
   }
 }
 
-export async function deleteTestimonialAction(id: string) {
+export async function deleteTestimonialAction(id: string): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -537,11 +593,14 @@ export async function deleteTestimonialAction(id: string) {
     return { success: true };
   } catch (err: any) {
     console.error('Failed to delete testimonial:', err);
-    return { error: err.message || 'Failed to delete feedback' };
+    return handleActionError(err);
   }
 }
 
-export async function toggleTestimonialActiveAction(id: string, isActive: boolean) {
+export async function toggleTestimonialActiveAction(
+  id: string,
+  isActive: boolean
+): Promise<ActionResponse> {
   await requireAdmin();
 
   const supabase = await createServerSupabaseClient();
@@ -559,6 +618,6 @@ export async function toggleTestimonialActiveAction(id: string, isActive: boolea
     return { success: true };
   } catch (err: any) {
     console.error('Failed to toggle testimonial status:', err);
-    return { error: err.message || 'Failed to update feedback status' };
+    return handleActionError(err);
   }
 }

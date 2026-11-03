@@ -1,5 +1,7 @@
 'use client';
 
+export const revalidate = 60;
+
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -23,15 +25,20 @@ import {
   MapPin,
   Star,
   Quote,
+  Flame,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { createClient } from '@/lib/supabase/client';
 import config from '@/lib/config';
 import { useLanguageStore, translations } from '@/store/language';
+import { useCartStore } from '@/store/cart';
 import ProductCard from '@/components/shop/ProductCard';
 import ProductSkeleton from '@/components/shop/ProductSkeleton';
 import type { Product, Category, Testimonial } from '@/lib/types';
 import { formatPrice } from '@/lib/utils';
+import toast from 'react-hot-toast';
 
 // Lucide Icon mapping for categories
 const getCategoryIcon = (slug: string, className = 'w-4 h-4') => {
@@ -65,6 +72,11 @@ export default function HomePage() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [isHeroPaused, setIsHeroPaused] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [heroJustAdded, setHeroJustAdded] = useState(false);
+
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+  const addItem = useCartStore((s) => s.addItem);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
@@ -103,14 +115,16 @@ export default function HomePage() {
             .order('sort_order', { ascending: true })
             .order('created_at', { ascending: false }),
 
-          // 2. Products explicitly flagged for hero slider
+          // 2. Hot-selling products explicitly flagged for hero slider (limit 6)
           supabase
             .from('products')
             .select('*')
-            .eq('is_active', true)
             .eq('show_in_hero', true)
+            .eq('is_active', true)
+            .eq('in_stock', true)
             .order('sort_order', { ascending: true })
-            .order('created_at', { ascending: false }),
+            .order('updated_at', { ascending: false })
+            .limit(6),
 
           // 3. Categories
           supabase
@@ -133,23 +147,19 @@ export default function HomePage() {
         setCategories(categoriesRes.data || []);
         setTestimonials((testimonialsRes.data || []) as Testimonial[]);
 
-        // Hero selection logic:
-        // First check products with show_in_hero = true AND image_url not empty
-        const flaggedHero = ((heroFlaggedRes.data || []) as Product[]).filter((p) =>
-          Boolean(p.image_url && p.image_url.trim())
-        );
-
-        if (flaggedHero.length > 0) {
-          setHeroProducts(flaggedHero);
+        // Hero selection logic (ONLY show_in_hero = true & in_stock & is_active & image_url, no fallback)
+        if (heroFlaggedRes.error) {
+          console.error('Error fetching hero products:', heroFlaggedRes.error);
+          setHeroProducts([]);
         } else {
-          // Fall back to featured products with images
-          const featuredWithImages = prods.filter(
-            (p) => p.is_featured && Boolean(p.image_url && p.image_url.trim())
+          const validHero = ((heroFlaggedRes.data || []) as Product[]).filter((p) =>
+            Boolean(p.image_url && p.image_url.trim())
           );
-          setHeroProducts(featuredWithImages);
+          setHeroProducts(validHero.slice(0, 6));
         }
       } catch (err) {
         console.warn('Error fetching home page data:', err);
+        setHeroProducts([]);
       } finally {
         setLoading(false);
       }
@@ -158,16 +168,57 @@ export default function HomePage() {
     fetchData();
   }, []);
 
-  // Hero Autoplay (4 seconds, pause on hover/touch, respect reduced motion)
+  // Hero Autoplay (3 seconds, pause on hover/focus/touch, respect reduced motion)
   useEffect(() => {
-    if (heroProducts.length <= 1 || isHeroPaused) return;
+    if (heroProducts.length <= 1 || isHeroPaused || prefersReducedMotion) return;
 
     const interval = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % heroProducts.length);
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [heroProducts.length, isHeroPaused]);
+  }, [heroProducts.length, isHeroPaused, prefersReducedMotion]);
+
+  const handleHeroAddToCart = (product: Product) => {
+    if (!product.in_stock) return;
+    addItem(product);
+    setHeroJustAdded(true);
+    toast.success(`${product.title} added to cart!`, {
+      icon: '🛒',
+      style: {
+        background: '#14532d',
+        color: '#fdf8ec',
+        borderRadius: '14px',
+        fontSize: '14px',
+        fontWeight: '600',
+        padding: '12px 18px',
+      },
+    });
+    setTimeout(() => setHeroJustAdded(false), 1600);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsHeroPaused(true);
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    setIsHeroPaused(false);
+    if (touchStartX.current !== null && touchEndX.current !== null) {
+      const distance = touchStartX.current - touchEndX.current;
+      if (distance > 40) {
+        setHeroIndex((prev) => (prev + 1) % heroProducts.length);
+      } else if (distance < -40) {
+        setHeroIndex((prev) => (prev - 1 + heroProducts.length) % heroProducts.length);
+      }
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   // Reset pagination when category changes
   const handleCategorySelect = (slug: string) => {
@@ -188,6 +239,10 @@ export default function HomePage() {
   const hasMoreProducts = visibleCount < filteredProducts.length;
 
   const currentHeroProduct = heroProducts[heroIndex] || null;
+  const nextHeroProduct =
+    heroProducts.length > 1
+      ? heroProducts[(heroIndex + 1) % heroProducts.length]
+      : null;
 
   return (
     <div className="overflow-x-hidden">
@@ -212,13 +267,13 @@ export default function HomePage() {
           }}
         />
 
-        <div className="container-app relative z-10 py-12 md:py-20 lg:py-24">
+        <div className="container-app relative z-10 pt-10 pb-12 sm:pt-14 sm:pb-16 md:pt-16 md:pb-20 lg:py-24">
           <div
             className={`grid grid-cols-1 ${
               currentHeroProduct ? 'lg:grid-cols-12' : 'max-w-3xl mx-auto'
             } gap-8 lg:gap-10 items-center`}
           >
-            {/* Left Content */}
+            {/* Left Content (Text first on mobile) */}
             <div
               className={`${
                 currentHeroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
@@ -302,90 +357,180 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right Column: Hero Slider Card (Admin Managed) */}
+            {/* Right Column: Hot-Selling Hero Slider Card */}
             {currentHeroProduct && (
               <div
-                className="lg:col-span-5 relative flex flex-col items-center justify-center pt-4 lg:pt-0 w-full"
+                className="lg:col-span-5 relative flex flex-col items-center justify-center pt-6 lg:pt-0 w-full"
                 onMouseEnter={() => setIsHeroPaused(true)}
                 onMouseLeave={() => setIsHeroPaused(false)}
-                onTouchStart={() => setIsHeroPaused(true)}
-                onTouchEnd={() => setIsHeroPaused(false)}
+                onFocus={() => setIsHeroPaused(true)}
+                onBlur={() => setIsHeroPaused(false)}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
               >
-                <div className="relative w-full max-w-sm sm:max-w-md aspect-square">
-                  {/* Background glow circle */}
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#c9a227]/30 to-[#22c55e]/20 blur-2xl transform scale-90" />
+                <div className="relative w-full max-w-[24rem] sm:max-w-md mx-auto">
+                  {/* Soft gold radial glow behind the card */}
+                  <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_center,#c9a227_0%,transparent_70%)] opacity-30 blur-2xl transform scale-95 pointer-events-none" />
 
-                  {/* Clickable Card Linking to Product */}
-                  <Link
-                    href={`/product/${currentHeroProduct.slug}`}
-                    className={`block relative w-full h-full rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-white p-4 group cursor-pointer ${
-                      prefersReducedMotion ? '' : 'transition-opacity duration-500'
-                    }`}
-                  >
-                    {/* The Whole Product Photo rendered via next/image object-contain */}
-                    <div className="relative w-full h-full">
-                      <Image
-                        key={currentHeroProduct.id}
-                        src={currentHeroProduct.image_url!}
-                        alt={currentHeroProduct.title}
-                        fill
-                        priority
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 420px"
-                        className="object-contain transition-transform duration-500 group-hover:scale-105"
-                      />
+                  {/* Desktop navigation arrows */}
+                  {heroProducts.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHeroIndex(
+                            (prev) => (prev - 1 + heroProducts.length) % heroProducts.length
+                          )
+                        }
+                        className="hidden md:flex absolute -left-4 top-[38%] -translate-y-1/2 w-9 h-9 rounded-full bg-white/95 hover:bg-white text-emerald-950 border border-stone-200/90 shadow-lg items-center justify-center transition-all hover:scale-110 active:scale-95 z-30 cursor-pointer"
+                        aria-label="Previous product"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-emerald-900" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHeroIndex((prev) => (prev + 1) % heroProducts.length)
+                        }
+                        className="hidden md:flex absolute -right-4 top-[38%] -translate-y-1/2 w-9 h-9 rounded-full bg-white/95 hover:bg-white text-emerald-950 border border-stone-200/90 shadow-lg items-center justify-center transition-all hover:scale-110 active:scale-95 z-30 cursor-pointer"
+                        aria-label="Next product"
+                      >
+                        <ChevronRight className="w-5 h-5 text-emerald-900" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Card Container */}
+                  <div className="relative rounded-3xl overflow-hidden bg-white border border-[#c9a227]/40 shadow-2xl flex flex-col">
+                    {/* Hot Selling Ribbon with Flame Icon (Top-Left) */}
+                    <div className="absolute top-3.5 left-3.5 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white shadow-md text-xs font-extrabold uppercase tracking-wide">
+                      <Flame className="w-3.5 h-3.5 fill-white text-white" />
+                      <span>{isUrdu ? 'ہاٹ سیلنگ' : 'Hot Selling'}</span>
                     </div>
 
-                    {/* Gradient bottom shadow inside card */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none rounded-3xl" />
-
-                    {/* Floating Product Name Badge (Full name wrapped onto up to 2 lines, never cut off with '...') */}
-                    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-lg border border-stone-100 flex items-center gap-2.5 z-20 max-w-[calc(100%-2rem)]">
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-900 shrink-0">
-                        {getCategoryIcon(currentHeroProduct.slug, 'w-4 h-4 text-emerald-900')}
+                    {/* Product Photo Box (Fixed aspect-square box, object-contain, padding on white-to-cream gradient, NO text overlapping) */}
+                    <Link
+                      href={`/product/${currentHeroProduct.slug}`}
+                      className="block relative aspect-square w-full overflow-hidden bg-gradient-to-b from-white to-[#fdf8ec] p-6 sm:p-8 cursor-pointer group"
+                    >
+                      <div
+                        key={currentHeroProduct.id}
+                        className={`relative w-full h-full flex items-center justify-center ${
+                          prefersReducedMotion
+                            ? ''
+                            : 'animate-float transition-all duration-500 group-hover:scale-105'
+                        }`}
+                      >
+                        <Image
+                          src={currentHeroProduct.image_url!}
+                          alt={currentHeroProduct.title}
+                          fill
+                          priority
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 420px"
+                          className="object-contain p-2"
+                        />
                       </div>
-                      <div className="text-left flex-1 min-w-0">
-                        <p
-                          className="text-xs sm:text-sm font-bold text-emerald-950 leading-tight line-clamp-2"
-                          style={{ color: '#022c22' }}
+                    </Link>
+
+                    {/* Caption Panel BELOW the image */}
+                    <div className="p-4 sm:p-5 bg-white border-t border-stone-100 flex flex-col gap-3">
+                      {/* Full product name (wrapped onto up to 2 lines, never cut off with '...') */}
+                      <Link
+                        href={`/product/${currentHeroProduct.slug}`}
+                        className="group cursor-pointer"
+                      >
+                        <h3
+                          className="text-base sm:text-lg font-extrabold text-[#14532d] leading-snug line-clamp-2 group-hover:text-[#c9a227] transition-colors"
+                          style={{ fontFamily: 'var(--font-heading)' }}
                         >
                           {isUrdu
                             ? currentHeroProduct.title_ur || currentHeroProduct.title
                             : currentHeroProduct.title}
-                        </p>
-                        <p
-                          className="text-[11px] text-emerald-800 font-semibold leading-tight mt-0.5"
-                          style={{ color: '#065f46' }}
-                        >
+                        </h3>
+                      </Link>
+
+                      {/* Unit badge & Large Gold Price Pill */}
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200">
                           {currentHeroProduct.unit}
-                        </p>
+                        </span>
+
+                        <div className="px-4 py-1 rounded-full bg-[#c9a227] text-[#14532d] font-black text-base sm:text-lg shadow-xs flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-[#14532d]" />
+                          <span>{formatPrice(currentHeroProduct.price)}</span>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Price Badge */}
-                    <div className="absolute bottom-4 right-4 bg-[#14532d]/95 backdrop-blur-md px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-[#fdf8ec] border border-[#c9a227]/40 flex items-center gap-1.5 shadow-lg z-20">
-                      <Sparkles className="w-3.5 h-3.5 text-[#e8c547]" />
-                      <span>{formatPrice(currentHeroProduct.price)}</span>
-                    </div>
-                  </Link>
-                </div>
-
-                {/* Tappable Pagination Dots */}
-                {heroProducts.length > 1 && (
-                  <div className="flex items-center justify-center gap-2 mt-4 z-20">
-                    {heroProducts.map((_, idx) => (
+                      {/* Full-width Add to Cart Button */}
                       <button
-                        key={idx}
-                        onClick={() => setHeroIndex(idx)}
-                        className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                          heroIndex === idx
-                            ? 'w-6 bg-[#e8c547]'
-                            : 'w-2 bg-white/50 hover:bg-white/80'
-                        }`}
-                        aria-label={`Go to slide ${idx + 1}`}
-                      />
-                    ))}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleHeroAddToCart(currentHeroProduct);
+                        }}
+                        className="w-full mt-1 py-3 px-4 rounded-xl bg-[#14532d] hover:bg-[#1b6b3a] active:scale-[0.98] text-[#fdf8ec] font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                      >
+                        <ShoppingBag className="w-4 h-4 text-[#e8c547]" />
+                        <span>
+                          {heroJustAdded
+                            ? isUrdu
+                              ? 'کارٹ میں شامل کر دیا!'
+                              : 'Added to Cart!'
+                            : isUrdu
+                            ? 'کارٹ میں ڈالیں'
+                            : 'Add to Cart'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Thin Progress Bar at bottom of card (fills over 3 seconds) */}
+                    <div className="w-full h-1 bg-stone-100 overflow-hidden">
+                      {!prefersReducedMotion && heroProducts.length > 1 && (
+                        <div
+                          key={heroIndex}
+                          className="h-full bg-gradient-to-r from-[#c9a227] to-[#e8c547] animate-hero-progress"
+                          style={{
+                            animationPlayState: isHeroPaused ? 'paused' : 'running',
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  {/* Preload Next Image */}
+                  {nextHeroProduct?.image_url && (
+                    <div className="hidden" aria-hidden="true">
+                      <Image
+                        src={nextHeroProduct.image_url}
+                        alt=""
+                        width={420}
+                        height={420}
+                        priority
+                      />
+                    </div>
+                  )}
+
+                  {/* At most 6 Tappable Dots */}
+                  {heroProducts.length > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-4 z-20">
+                      {heroProducts.slice(0, 6).map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setHeroIndex(idx)}
+                          className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                            heroIndex === idx
+                              ? 'w-6 bg-[#e8c547]'
+                              : 'w-2 bg-white/50 hover:bg-white/80'
+                          }`}
+                          aria-label={`Go to slide ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

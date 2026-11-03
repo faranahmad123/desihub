@@ -101,6 +101,9 @@ export const translations = {
     email: 'Email',
     password: 'Password',
     feedback: 'Feedback',
+    hotSelling: 'Hot Selling',
+    hotSellingSlider: 'Hot selling (show in home hero slider)',
+    hotSellingLimit: '6 hot-selling products are already selected. Turn one off first.',
   },
   ur: {
     shopNow: 'ابھی خریدیں',
@@ -169,6 +172,9 @@ export const translations = {
     email: 'ای میل',
     password: 'پاس ورڈ',
     feedback: 'فیڈ بیک',
+    hotSelling: 'ہاٹ سیلنگ',
+    hotSellingSlider: 'ہاٹ سیلنگ (ہوم پیج سلائیڈر میں دکھائیں)',
+    hotSellingLimit: '6 ہاٹ سیلنگ مصنوعات پہلے ہی منتخب ہیں۔ پہلے کسی ایک کو بند کریں۔',
   },
 } as const;
 

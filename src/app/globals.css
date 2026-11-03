@@ -153,6 +153,22 @@
   50% { transform: translateY(-6px); }
 }
 
+@keyframes heroProgress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.animate-hero-progress {
+  animation: heroProgress 3s linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-progress,
+  .animate-float {
+    animation: none !important;
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out forwards;
 }

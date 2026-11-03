@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   FiPlus,
@@ -15,6 +15,7 @@ import {
   FiUploadCloud,
   FiEye,
   FiEyeOff,
+  FiAlertTriangle,
 } from 'react-icons/fi';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -59,6 +60,19 @@ function ProductsContent() {
     show_in_hero: false,
     is_active: true,
   });
+
+  const hotSellingCount = useMemo(
+    () => products.filter((p) => p.show_in_hero).length,
+    [products]
+  );
+
+  const isHeroLimitReached = useMemo(
+    () =>
+      products.filter(
+        (p) => p.show_in_hero && (!editingProduct || p.id !== editingProduct.id)
+      ).length >= 6,
+    [products, editingProduct]
+  );
 
   const loadData = async () => {
     try {
@@ -185,6 +199,11 @@ function ProductsContent() {
       return;
     }
 
+    if (formData.show_in_hero && isHeroLimitReached) {
+      toast.error('6 hot-selling products are already selected. Turn one off first.');
+      return;
+    }
+
     setSaving(true);
 
     const payload = {
@@ -208,7 +227,11 @@ function ProductsContent() {
     try {
       const res = await saveProductAction(payload);
       if (res.error) {
-        toast.error(res.error);
+        if (res.error.toLowerCase().includes('schema cache')) {
+          toast.error('The database needs the latest update. Run the newest SQL file in Supabase, then try again.');
+        } else {
+          toast.error(res.error);
+        }
         setSaving(false);
         return;
       }
@@ -244,6 +267,15 @@ function ProductsContent() {
     field: 'in_stock' | 'is_featured' | 'is_active' | 'show_in_hero'
   ) => {
     const updated = !product[field];
+
+    if (field === 'show_in_hero' && updated === true) {
+      const otherCount = products.filter((p) => p.show_in_hero && p.id !== product.id).length;
+      if (otherCount >= 6) {
+        toast.error('6 hot-selling products are already selected. Turn one off first.');
+        return;
+      }
+    }
+
     // Optimistic UI update
     setProducts((prev) =>
       prev.map((p) => (p.id === product.id ? { ...p, [field]: updated } : p))
@@ -258,7 +290,7 @@ function ProductsContent() {
         in_stock: updated ? 'Marked in stock' : 'Marked out of stock',
         is_featured: updated ? 'Featured on homepage' : 'Unfeatured',
         is_active: updated ? 'Product is now visible on storefront' : 'Product hidden from storefront',
-        show_in_hero: updated ? 'Added to hero slider' : 'Removed from hero slider',
+        show_in_hero: updated ? 'Added to hot-selling hero slider' : 'Removed from hot-selling hero slider',
       };
       toast.success(labelMap[field]);
     }
@@ -304,6 +336,17 @@ function ProductsContent() {
           Add New Product
         </button>
       </div>
+
+      {/* Warning banner if > 6 hot-selling products selected */}
+      {hotSellingCount > 6 && (
+        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 flex items-start gap-3 text-xs sm:text-sm text-amber-900 shadow-xs">
+          <FiAlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+          <div>
+            <span className="font-bold">Warning: </span>
+            More than 6 hot-selling products are selected. Only the first 6 are shown on the home page.
+          </div>
+        </div>
+      )}
 
       {/* Search & Category Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -381,7 +424,7 @@ function ProductsContent() {
                         </h3>
                         {product.show_in_hero && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
-                            Hero
+                            Hot
                           </span>
                         )}
                       </div>
@@ -470,7 +513,7 @@ function ProductsContent() {
                     <th className="px-5 py-3.5 text-center">Status</th>
                     <th className="px-5 py-3.5 text-center">In Stock</th>
                     <th className="px-5 py-3.5 text-center">Featured</th>
-                    <th className="px-5 py-3.5 text-center">Hero</th>
+                    <th className="px-5 py-3.5 text-center">Hot</th>
                     <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -495,7 +538,7 @@ function ProductsContent() {
                               <span className="font-semibold text-slate-900">{product.title}</span>
                               {product.show_in_hero && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                  Hero
+                                  Hot
                                 </span>
                               )}
                             </div>
@@ -564,9 +607,9 @@ function ProductsContent() {
                               ? 'bg-amber-100 text-amber-900 border-amber-300'
                               : 'text-slate-300 border-transparent hover:text-slate-500'
                           }`}
-                          title="Toggle home hero slider"
+                          title="Toggle hot selling (home hero slider)"
                         >
-                          Hero
+                          Hot
                         </button>
                       </td>
 
@@ -827,15 +870,33 @@ function ProductsContent() {
                   <span>Featured</span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
-                  <input
-                    type="checkbox"
-                    checked={formData.show_in_hero}
-                    onChange={(e) => setFormData({ ...formData, show_in_hero: e.target.checked })}
-                    className="w-4 h-4 rounded text-emerald-700"
-                  />
-                  <span>Show in home hero slider</span>
-                </label>
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.show_in_hero}
+                      onChange={(e) => {
+                        if (e.target.checked && isHeroLimitReached) {
+                          toast.error('6 hot-selling products are already selected. Turn one off first.');
+                          return;
+                        }
+                        setFormData({ ...formData, show_in_hero: e.target.checked });
+                      }}
+                      className="w-4 h-4 rounded text-emerald-700"
+                    />
+                    <span className="flex flex-wrap items-center gap-1 font-bold">
+                      Hot selling (show in home hero slider)
+                      <span className="text-slate-500 font-normal urdu text-xs" style={{ direction: 'rtl' }}>
+                        (ہاٹ سیلنگ (ہوم پیج سلائیڈر میں دکھائیں))
+                      </span>
+                    </span>
+                  </label>
+                  {isHeroLimitReached && !formData.show_in_hero && (
+                    <p className="text-[11px] text-amber-700 font-semibold pl-6">
+                      6 hot-selling products are already selected. Turn one off first.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Modal Buttons */}
