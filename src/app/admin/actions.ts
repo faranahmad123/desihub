@@ -7,7 +7,6 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 
 const GENERIC_ERROR = 'Incorrect username or password';
 // Debug mode turned ON per user request
@@ -326,6 +325,27 @@ export async function updateOrderStatusAction(
 }
 
 /**
+ * Delete Order Server Action
+ * Securely deletes an order by ID (with cascade cleanup on order_items).
+ */
+export async function deleteOrderAction(orderId: string) {
+  await requireAdmin();
+
+  const supabase = await createServerSupabaseClient();
+  const { error } = await supabase
+    .from('orders')
+    .delete()
+    .eq('id', orderId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/admin/orders');
+  return { success: true };
+}
+
+/**
  * Get New Orders Count Server Action (for Navigation badge)
  */
 export async function getNewOrdersCountAction(): Promise<number> {
@@ -340,6 +360,87 @@ export async function getNewOrdersCountAction(): Promise<number> {
     return count;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Save Site Settings Server Action
+ * Updates key/value pairs in the settings table and purges layout cache.
+ * Preserves is_public flag so public settings remain accessible to storefront visitors.
+ */
+export async function saveSettingsAction(settings: Record<string, string>) {
+  await requireAdmin();
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    // 1. Fetch existing settings rows to check existing columns and avoid overwriting is_public to false
+    const { data: existingRows } = await supabase.from('settings').select('*');
+    const existingMap = new Map((existingRows || []).map((row: any) => [row.key, row]));
+
+    // Check if the table has an is_public column
+    const sampleRow = existingRows && existingRows.length > 0 ? existingRows[0] : null;
+    const hasIsPublicCol = sampleRow !== null && 'is_public' in sampleRow;
+
+    for (const [key, value] of Object.entries(settings)) {
+      const now = new Date().toISOString();
+      const existing = existingMap.get(key);
+
+      if (existing) {
+        // Row exists. Update value and updated_at.
+        // If is_public column exists, ensure it is NOT overwritten to false.
+        const updateData: Record<string, any> = {
+          value: value ?? '',
+          updated_at: now,
+        };
+        if (hasIsPublicCol) {
+          // Keep existing is_public (or ensure true); NEVER overwrite to false
+          updateData.is_public = existing.is_public !== undefined && existing.is_public !== null
+            ? (existing.is_public || true)
+            : true;
+        }
+
+        const { error } = await supabase
+          .from('settings')
+          .update(updateData)
+          .eq('key', key);
+
+        if (error) throw error;
+      } else {
+        // Row does not exist. Insert new row with is_public: true if column exists.
+        const insertData: Record<string, any> = {
+          key,
+          value: value ?? '',
+          updated_at: now,
+        };
+        if (hasIsPublicCol) {
+          insertData.is_public = true;
+        }
+
+        const { error } = await supabase
+          .from('settings')
+          .insert([insertData]);
+
+        if (error) {
+          // Fallback if insertData had column error, try standard upsert
+          const fallbackData = { key, value: value ?? '', updated_at: now };
+          const { error: upsertErr } = await supabase
+            .from('settings')
+            .upsert(fallbackData, { onConflict: 'key' });
+          if (upsertErr) throw upsertErr;
+        }
+      }
+    }
+
+    // Instantly purge cache for the entire site (layout, pages, footer)
+    revalidatePath('/', 'layout');
+    revalidatePath('/');
+    revalidatePath('/shop');
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to save settings:', err);
+    return { error: err.message || 'Failed to save settings to database' };
   }
 }
 
