@@ -152,7 +152,7 @@ export default function Footer({ initialSettings }: FooterProps) {
               style={{ fontFamily: 'var(--font-heading)' }}
             >
               <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
-              {t.quickLinks}
+              Quick Links
             </h4>
             <ul className="space-y-2.5 text-sm">
               <li>
@@ -210,7 +210,7 @@ export default function Footer({ initialSettings }: FooterProps) {
               style={{ fontFamily: 'var(--font-heading)' }}
             >
               <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
-              {t.contactUs}
+              Contact Us
             </h4>
 
             <ul className="space-y-3 text-sm text-[#f5edd5]">
