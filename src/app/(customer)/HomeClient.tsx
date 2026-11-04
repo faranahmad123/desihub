@@ -230,9 +230,9 @@ export default function HomeClient() {
     selectedCategory === 'all'
       ? allProducts
       : allProducts.filter((p) => {
-          const cat = categories.find((c) => c.slug === selectedCategory);
-          return p.category_id === cat?.id || p.slug.includes(selectedCategory);
-        });
+        const cat = categories.find((c) => c.slug === selectedCategory);
+        return p.category_id === cat?.id || p.slug.includes(selectedCategory);
+      });
 
   const displayedProducts = filteredProducts.slice(0, visibleCount);
   const hasMoreProducts = visibleCount < filteredProducts.length;
@@ -268,15 +268,13 @@ export default function HomeClient() {
 
         <div className="container-app relative z-10 pt-10 pb-12 sm:pt-14 sm:pb-16 md:pt-16 md:pb-20 lg:py-24">
           <div
-            className={`grid grid-cols-1 ${
-              currentHeroProduct ? 'lg:grid-cols-12' : 'max-w-3xl mx-auto'
-            } gap-8 lg:gap-10 items-center`}
+            className={`grid grid-cols-1 ${currentHeroProduct ? 'lg:grid-cols-12' : 'max-w-3xl mx-auto'
+              } gap-8 lg:gap-10 items-center`}
           >
             {/* Left Content (Text first on mobile) */}
             <div
-              className={`${
-                currentHeroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
-              } on-dark flex flex-col items-center text-center space-y-5 animate-slide-up`}
+              className={`${currentHeroProduct ? 'lg:col-span-7 lg:items-start lg:text-left' : 'items-center text-center'
+                } on-dark flex flex-col items-center text-center space-y-5 animate-slide-up`}
             >
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-[#f5e6b8] bg-[#c9a227]/25 border border-[#c9a227]/50 shadow-xs backdrop-blur-xs">
@@ -415,11 +413,10 @@ export default function HomeClient() {
                     >
                       <div
                         key={currentHeroProduct.id}
-                        className={`relative w-full h-full flex items-center justify-center ${
-                          prefersReducedMotion
+                        className={`relative w-full h-full flex items-center justify-center ${prefersReducedMotion
                             ? ''
                             : 'animate-float transition-all duration-500 group-hover:scale-105'
-                        }`}
+                          }`}
                       >
                         <Image
                           src={currentHeroProduct.image_url!}
@@ -440,9 +437,8 @@ export default function HomeClient() {
                         className="group cursor-pointer block text-gray-900 hover:text-[#14532d]"
                       >
                         <h3
-                          className={`text-base sm:text-lg font-extrabold text-[#14532d] group-hover:text-[#c9a227] leading-snug line-clamp-2 transition-colors ${
-                            isUrdu ? 'urdu text-right text-lg sm:text-xl' : ''
-                          }`}
+                          className={`text-base sm:text-lg font-extrabold text-[#14532d] group-hover:text-[#c9a227] leading-snug line-clamp-2 transition-colors ${isUrdu ? 'urdu text-right text-lg sm:text-xl' : ''
+                            }`}
                           style={
                             isUrdu
                               ? { fontFamily: 'var(--font-urdu)', direction: 'rtl', color: '#14532d' }
@@ -484,8 +480,8 @@ export default function HomeClient() {
                               ? 'کارٹ میں شامل کر دیا!'
                               : 'Added to Cart!'
                             : isUrdu
-                            ? 'کارٹ میں ڈالیں'
-                            : 'Add to Cart'}
+                              ? 'کارٹ میں ڈالیں'
+                              : 'Add to Cart'}
                         </span>
                       </button>
                     </div>
@@ -525,11 +521,10 @@ export default function HomeClient() {
                           key={idx}
                           type="button"
                           onClick={() => setHeroIndex(idx)}
-                          className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                            heroIndex === idx
+                          className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${heroIndex === idx
                               ? 'w-6 bg-[#e8c547]'
                               : 'w-2 bg-white/50 hover:bg-white/80'
-                          }`}
+                            }`}
                           aria-label={`Go to slide ${idx + 1}`}
                         />
                       ))}
@@ -551,11 +546,10 @@ export default function HomeClient() {
             {/* "All" Chip */}
             <button
               onClick={() => handleCategorySelect('all')}
-              className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${
-                selectedCategory === 'all'
+              className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${selectedCategory === 'all'
                   ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
                   : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
-              }`}
+                }`}
             >
               <Leaf className="w-4 h-4 text-emerald-600" />
               <span>{t.allCategories}</span>
@@ -568,11 +562,10 @@ export default function HomeClient() {
                 <button
                   key={cat.id}
                   onClick={() => handleCategorySelect(cat.slug)}
-                  className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${
-                    isActive
+                  className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${isActive
                       ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
                       : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
-                  }`}
+                    }`}
                 >
                   <span className={isActive ? 'text-[#fdf8ec]' : 'text-[#14532d]'}>
                     {getCategoryIcon(cat.slug, 'w-4 h-4')}
@@ -896,7 +889,7 @@ export default function HomeClient() {
                 {t.whatCustomersSay}
               </h2>
               <p className="text-xs sm:text-sm text-stone-600">
-                Real experiences shared by our valued patrons across Islamabad and Rawalpindi.
+                Real experiences shared by our valued patrons across Pakistan.
               </p>
             </div>
 
