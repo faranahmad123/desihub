@@ -865,7 +865,7 @@ export default function HomeClient() {
                 Delivered to Your Home
               </h3>
               <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                We deliver fresh to your doorstep in Islamabad and Rawalpindi. Inspect your goods and pay Cash on Delivery.
+                We deliver fresh to your doorstep in Pakistan. Inspect your goods and pay Cash on Delivery.
               </p>
             </div>
           </div>
