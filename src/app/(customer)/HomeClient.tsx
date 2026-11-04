@@ -414,8 +414,8 @@ export default function HomeClient() {
                       <div
                         key={currentHeroProduct.id}
                         className={`relative w-full h-full flex items-center justify-center ${prefersReducedMotion
-                            ? ''
-                            : 'animate-float transition-all duration-500 group-hover:scale-105'
+                          ? ''
+                          : 'animate-float transition-all duration-500 group-hover:scale-105'
                           }`}
                       >
                         <Image
@@ -522,8 +522,8 @@ export default function HomeClient() {
                           type="button"
                           onClick={() => setHeroIndex(idx)}
                           className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${heroIndex === idx
-                              ? 'w-6 bg-[#e8c547]'
-                              : 'w-2 bg-white/50 hover:bg-white/80'
+                            ? 'w-6 bg-[#e8c547]'
+                            : 'w-2 bg-white/50 hover:bg-white/80'
                             }`}
                           aria-label={`Go to slide ${idx + 1}`}
                         />
@@ -547,8 +547,8 @@ export default function HomeClient() {
             <button
               onClick={() => handleCategorySelect('all')}
               className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${selectedCategory === 'all'
-                  ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
-                  : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
+                ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
+                : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
                 }`}
             >
               <Leaf className="w-4 h-4 text-emerald-600" />
@@ -563,8 +563,8 @@ export default function HomeClient() {
                   key={cat.id}
                   onClick={() => handleCategorySelect(cat.slug)}
                   className={`snap-start shrink-0 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 border shadow-xs min-h-[44px] cursor-pointer ${isActive
-                      ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
-                      : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
+                    ? 'bg-[#14532d] text-[#fdf8ec] border-[#14532d] shadow-sm'
+                    : 'bg-white text-stone-700 border-stone-200/90 hover:bg-[#fdf8ec] hover:border-[#c9a227]'
                     }`}
                 >
                   <span className={isActive ? 'text-[#fdf8ec]' : 'text-[#14532d]'}>
@@ -729,7 +729,7 @@ export default function HomeClient() {
                   Fast & Safe Delivery
                 </h3>
                 <p className="text-xs text-[#f5edd5] leading-relaxed">
-                  Free doorstep delivery across Islamabad & Rawalpindi with COD.
+                  Free doorstep delivery across Pakistan with COD.
                 </p>
               </div>
             </div>
@@ -802,7 +802,7 @@ export default function HomeClient() {
                 Direct to Your Door
               </h3>
               <p className="text-xs text-stone-600 leading-relaxed">
-                Fast, dependable delivery in Islamabad & Rawalpindi. Inspect your package and pay Cash on Delivery.
+                Fast, dependable delivery in Pakistan. Inspect your package and pay Cash on Delivery.
               </p>
             </div>
           </div>
