@@ -18,6 +18,8 @@ export interface StoreSettingsProps {
   email?: string;
   facebook?: string;
   instagram?: string;
+  instagram_url?: string;
+  instagramUrl?: string;
   tiktok?: string;
   deliveryMessage?: string;
 }
@@ -30,7 +32,14 @@ export default function Footer({ initialSettings }: FooterProps) {
   const { language } = useLanguageStore();
   const t = translations[language];
 
-  // Initialize with server-rendered fresh database settings
+  const initialInsta = (
+    initialSettings?.instagramUrl ||
+    initialSettings?.instagram_url ||
+    initialSettings?.instagram ||
+    ''
+  ).trim();
+
+  // Initialize with server-rendered fresh database settings (no hardcoded Instagram URLs)
   const [storeInfo, setStoreInfo] = useState<StoreSettingsProps>({
     brandName: initialSettings?.brandName || 'DESI HUB',
     taglineUrdu: initialSettings?.taglineUrdu || 'قدرتی غذائیں، صحت مند زندگی',
@@ -40,10 +49,30 @@ export default function Footer({ initialSettings }: FooterProps) {
     whatsappDisplay: initialSettings?.whatsappDisplay || '0316-5479364',
     email: initialSettings?.email || 'desihub224@gmail.com',
     facebook: initialSettings?.facebook || 'https://facebook.com/desihub',
-    instagram: initialSettings?.instagram || 'https://instagram.com/desihub',
+    instagram: initialInsta,
+    instagram_url: initialInsta,
     tiktok: initialSettings?.tiktok || 'https://tiktok.com/@desihub',
     deliveryMessage: initialSettings?.deliveryMessage || 'Free Home Delivery in Islamabad & Rawalpindi',
   });
+
+  // Sync if initialSettings prop changes
+  useEffect(() => {
+    if (initialSettings) {
+      const incomingInsta = (
+        initialSettings.instagramUrl ||
+        initialSettings.instagram_url ||
+        initialSettings.instagram ||
+        ''
+      ).trim();
+
+      setStoreInfo((prev) => ({
+        ...prev,
+        ...initialSettings,
+        instagram: incomingInsta,
+        instagram_url: incomingInsta,
+      }));
+    }
+  }, [initialSettings]);
 
   // Client-side hydration re-check from Supabase to guarantee real-time synchronization
   useEffect(() => {
@@ -56,12 +85,13 @@ export default function Footer({ initialSettings }: FooterProps) {
 
         const map: Record<string, string> = {};
         data.forEach((row) => {
-          if (row.key && row.value) {
-            map[row.key] = row.value;
+          if (row.key) {
+            map[row.key] = (row.value || '').trim();
           }
         });
 
         const liveEmail = map.store_email || map.email;
+        const liveInstagram = (map.instagram_url ?? map.instagram ?? '').trim();
 
         setStoreInfo((prev) => ({
           ...prev,
@@ -72,9 +102,10 @@ export default function Footer({ initialSettings }: FooterProps) {
           whatsappNumber: map.whatsapp_number || prev.whatsappNumber,
           whatsappDisplay: map.whatsapp_display || map.whatsapp_number || prev.whatsappDisplay,
           email: liveEmail || prev.email,
-          facebook: map.facebook || prev.facebook,
-          instagram: map.instagram_url || map.instagram || prev.instagram,
-          tiktok: map.tiktok || prev.tiktok,
+          facebook: map.facebook !== undefined ? map.facebook : prev.facebook,
+          instagram: liveInstagram,
+          instagram_url: liveInstagram,
+          tiktok: map.tiktok !== undefined ? map.tiktok : prev.tiktok,
           deliveryMessage: map.delivery_message || prev.deliveryMessage,
         }));
       } catch (err) {
@@ -84,6 +115,8 @@ export default function Footer({ initialSettings }: FooterProps) {
 
     fetchLiveSettings();
   }, []);
+
+  const instagramLink = (storeInfo.instagram_url || storeInfo.instagram || '').trim();
 
   return (
     <footer className="on-dark text-[#fdf8ec] mt-auto bg-[#14532d] border-t-4 border-[#c9a227]">
@@ -99,123 +132,143 @@ export default function Footer({ initialSettings }: FooterProps) {
 
             {/* Urdu Tagline */}
             <p
-              className="text-[#e8c547] text-base font-semibold urdu pt-1"
-              style={{ fontFamily: 'var(--font-urdu)', direction: 'rtl' }}
+              className="text-[#e8c547] text-lg font-bold urdu leading-loose tracking-wide pt-1"
+              style={{ fontFamily: 'var(--font-urdu)', direction: 'rtl', textAlign: 'left' }}
             >
               {storeInfo.taglineUrdu}
             </p>
-          </div>
 
-          {/* Column 2: Quick Links */}
-          <div>
-            <h4
-              className="text-[#fdf8ec] text-base font-bold mb-4 tracking-wide flex items-center gap-2"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
-              Quick Navigation
-            </h4>
-            <nav className="flex flex-col gap-2.5 text-sm">
-              <Link href="/" className="text-[#f5edd5] hover:text-[#c9a227] transition-colors flex items-center gap-1.5">
-                <FiArrowRight size={14} className="text-[#c9a227]" />
-                {t.home}
-              </Link>
-              <Link href="/shop" className="text-[#f5edd5] hover:text-[#c9a227] transition-colors flex items-center gap-1.5">
-                <FiArrowRight size={14} className="text-[#c9a227]" />
-                {t.shop}
-              </Link>
-              <Link href="/track-order" className="text-[#f5edd5] hover:text-[#c9a227] transition-colors flex items-center gap-1.5">
-                <FiArrowRight size={14} className="text-[#c9a227]" />
-                {t.trackOrder}
-              </Link>
-              <Link href="/checkout" className="text-[#f5edd5] hover:text-[#c9a227] transition-colors flex items-center gap-1.5">
-                <FiArrowRight size={14} className="text-[#c9a227]" />
-                Checkout (COD)
-              </Link>
-            </nav>
-          </div>
-
-          {/* Column 3: Contact & Order Inquiries */}
-          <div>
-            <h4
-              className="text-[#fdf8ec] text-base font-bold mb-4 tracking-wide flex items-center gap-2"
-              style={{ fontFamily: 'var(--font-heading)' }}
-            >
-              <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
-              Get in Touch
-            </h4>
-            <div className="flex flex-col gap-3 text-sm">
-              {/* Phone */}
-              {storeInfo.phone && (
-                <a
-                  href={`tel:${storeInfo.phone}`}
-                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
-                    <FiPhone size={15} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-300 block uppercase">Phone Support</span>
-                    <span className="font-semibold font-mono text-[#fdf8ec]">
-                      {storeInfo.whatsappDisplay || storeInfo.phone}
-                    </span>
-                  </div>
-                </a>
-              )}
-
-              {/* WhatsApp */}
-              {storeInfo.whatsappNumber && (
-                <a
-                  href={`https://wa.me/${storeInfo.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I want to order from DESI HUB.')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-emerald-700/60 flex items-center justify-center text-emerald-300">
-                    <FaWhatsapp size={16} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-300 block uppercase">WhatsApp Orders</span>
-                    <span className="font-semibold font-mono text-[#fdf8ec]">
-                      {storeInfo.whatsappDisplay || storeInfo.whatsappNumber}
-                    </span>
-                  </div>
-                </a>
-              )}
-
-              {/* Free Home Delivery */}
-              <div className="flex items-center gap-3 text-[#f5edd5]">
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
-                  <FiMapPin size={15} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-stone-300 block uppercase">Free Home Delivery</span>
-                  <span className="text-[#fdf8ec]">Islamabad & Rawalpindi</span>
-                </div>
-              </div>
-
-              {/* Email — strictly dynamic from store_email or email */}
-              {storeInfo.email && (
-                <a
-                  href={`mailto:${storeInfo.email}`}
-                  className="flex items-center gap-3 text-[#f5edd5] hover:text-[#fdf8ec] transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[#c9a227]">
-                    <FiMail size={15} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-300 block uppercase">Email</span>
-                    <span className="font-mono text-xs text-[#fdf8ec] font-semibold">{storeInfo.email}</span>
-                  </div>
-                </a>
-              )}
+            {/* Pure Organic Assurance Pill */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-900/60 border border-[#c9a227]/40 text-xs font-semibold text-[#f5e6b8]">
+              <span className="w-2 h-2 rounded-full bg-[#e8c547] animate-pulse" />
+              100% Guaranteed Fresh & Chemical-Free
             </div>
           </div>
 
-          {/* Column 4: Social Channels */}
-          <div>
+          {/* Column 2: Quick Links */}
+          <div className="space-y-4">
             <h4
-              className="text-[#fdf8ec] text-base font-bold mb-4 tracking-wide flex items-center gap-2"
+              className="text-base font-bold text-[#fdf8ec] tracking-wider uppercase flex items-center gap-2"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
+              {t.quickLinks}
+            </h4>
+            <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link
+                  href="/"
+                  className="text-[#f5edd5] hover:text-[#e8c547] transition-colors flex items-center gap-1.5 group"
+                >
+                  <FiArrowRight className="w-3.5 h-3.5 opacity-0 -ml-5 group-hover:opacity-100 group-hover:ml-0 transition-all text-[#e8c547]" />
+                  <span>{t.home}</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/shop"
+                  className="text-[#f5edd5] hover:text-[#e8c547] transition-colors flex items-center gap-1.5 group"
+                >
+                  <FiArrowRight className="w-3.5 h-3.5 opacity-0 -ml-5 group-hover:opacity-100 group-hover:ml-0 transition-all text-[#e8c547]" />
+                  <span>{t.shop}</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/track-order"
+                  className="text-[#f5edd5] hover:text-[#e8c547] transition-colors flex items-center gap-1.5 group"
+                >
+                  <FiArrowRight className="w-3.5 h-3.5 opacity-0 -ml-5 group-hover:opacity-100 group-hover:ml-0 transition-all text-[#e8c547]" />
+                  <span>{t.trackOrder}</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/checkout"
+                  className="text-[#f5edd5] hover:text-[#e8c547] transition-colors flex items-center gap-1.5 group"
+                >
+                  <FiArrowRight className="w-3.5 h-3.5 opacity-0 -ml-5 group-hover:opacity-100 group-hover:ml-0 transition-all text-[#e8c547]" />
+                  <span>{t.cart} / Checkout</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/admin/login"
+                  className="text-[#f5edd5]/60 hover:text-[#e8c547] transition-colors flex items-center gap-1.5 group text-xs pt-1"
+                >
+                  <FiArrowRight className="w-3 opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all text-[#e8c547]" />
+                  <span>Admin Portal</span>
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Column 3: Contact & Delivery Info */}
+          <div className="space-y-4">
+            <h4
+              className="text-base font-bold text-[#fdf8ec] tracking-wider uppercase flex items-center gap-2"
+              style={{ fontFamily: 'var(--font-heading)' }}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
+              {t.contactUs}
+            </h4>
+
+            <ul className="space-y-3 text-sm text-[#f5edd5]">
+              <li>
+                <a
+                  href={`tel:${storeInfo.phone}`}
+                  className="flex items-start gap-3 hover:text-[#e8c547] transition-colors group"
+                >
+                  <FiPhone className="w-4 h-4 text-[#e8c547] mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div>
+                    <p className="font-semibold">{storeInfo.phone}</p>
+                    <p className="text-xs text-[#f5edd5]/70">Direct Customer Helpline</p>
+                  </div>
+                </a>
+              </li>
+
+              <li>
+                <a
+                  href={`https://wa.me/${storeInfo.whatsappNumber}?text=${encodeURIComponent('Assalam-o-Alaikum! I have an inquiry about DESI HUB products.')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-3 hover:text-[#e8c547] transition-colors group"
+                >
+                  <FaWhatsapp className="w-4 h-4 text-[#e8c547] mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div>
+                    <p className="font-semibold">{storeInfo.whatsappDisplay || storeInfo.whatsappNumber}</p>
+                    <p className="text-xs text-[#f5edd5]/70">Instant WhatsApp Orders</p>
+                  </div>
+                </a>
+              </li>
+
+              <li>
+                <a
+                  href={`mailto:${storeInfo.email}`}
+                  className="flex items-start gap-3 hover:text-[#e8c547] transition-colors group"
+                >
+                  <FiMail className="w-4 h-4 text-[#e8c547] mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div>
+                    <p className="font-semibold break-all">{storeInfo.email}</p>
+                    <p className="text-xs text-[#f5edd5]/70">Support & Bulk Orders</p>
+                  </div>
+                </a>
+              </li>
+
+              <li className="flex items-start gap-3 pt-1">
+                <FiMapPin className="w-4 h-4 text-[#e8c547] mt-0.5 shrink-0" />
+                <div className="text-xs leading-relaxed text-[#f5edd5]/90">
+                  <p className="font-semibold text-sm text-[#fdf8ec]">Free Delivery Areas</p>
+                  <p>{storeInfo.deliveryMessage}</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          {/* Column 4: Social Links & Community */}
+          <div className="space-y-4">
+            <h4
+              className="text-base font-bold text-[#fdf8ec] tracking-wider uppercase flex items-center gap-2"
               style={{ fontFamily: 'var(--font-heading)' }}
             >
               <span className="w-2 h-2 rounded-full bg-[#c9a227]" />
@@ -237,9 +290,11 @@ export default function Footer({ initialSettings }: FooterProps) {
                   <FaFacebookF size={16} />
                 </a>
               )}
-              {storeInfo.instagram && (
+
+              {/* Instagram link: Bound directly to dynamic instagram_url from settings. Hidden if empty. */}
+              {instagramLink ? (
                 <a
-                  href={storeInfo.instagram}
+                  href={instagramLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-10 h-10 rounded-xl bg-white/10 hover:bg-[#c9a227] hover:text-[#14532d] flex items-center justify-center transition-all hover:scale-105"
@@ -247,7 +302,8 @@ export default function Footer({ initialSettings }: FooterProps) {
                 >
                   <FaInstagram size={16} />
                 </a>
-              )}
+              ) : null}
+
               {storeInfo.tiktok && (
                 <a
                   href={storeInfo.tiktok}

@@ -38,8 +38,8 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
     whatsappDisplay: '0316-5479364',
     email: 'desihub224@gmail.com',
     facebook: 'https://facebook.com/desihub',
-    instagram: 'https://instagram.com/desihub',
-    instagramUrl: 'https://instagram.com/desihub',
+    instagram: '',
+    instagramUrl: '',
     tiktok: 'https://tiktok.com/@desihub',
     deliveryMessage: 'Free Home Delivery in Islamabad & Rawalpindi',
   };
@@ -55,12 +55,12 @@ async function getLiveStoreSettings(): Promise<StoreSettings> {
     if (data && data.length > 0) {
       const map: Record<string, string> = {};
       data.forEach((row) => {
-        if (row.key && row.value) {
-          map[row.key] = row.value;
+        if (row.key) {
+          map[row.key] = (row.value || '').trim();
         }
       });
 
-      const insta = map.instagram_url || map.instagram || fallback.instagram;
+      const insta = (map.instagram_url || map.instagram || '').trim();
 
       return {
         brandName: map.brand_name || fallback.brandName,

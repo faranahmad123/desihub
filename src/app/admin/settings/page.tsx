@@ -57,9 +57,9 @@ export default function AdminSettingsPage() {
             ...(loaded.hero_headline ? { heroHeadline: loaded.hero_headline } : {}),
             ...(loaded.hero_subheadline ? { heroSubHeadline: loaded.hero_subheadline } : {}),
             ...(loaded.facebook ? { facebook: loaded.facebook } : {}),
-            ...(loaded.instagram_url
+            ...(loaded.instagram_url !== undefined
               ? { instagramUrl: loaded.instagram_url, instagram: loaded.instagram_url }
-              : loaded.instagram
+              : loaded.instagram !== undefined
               ? { instagramUrl: loaded.instagram, instagram: loaded.instagram }
               : {}),
             ...(loaded.tiktok ? { tiktok: loaded.tiktok } : {}),

@@ -22,7 +22,7 @@ const config = {
   // Social
   social: {
     facebook: 'https://facebook.com/desihub',
-    instagram: 'https://instagram.com/desihub',
+    instagram: '',
     tiktok: 'https://tiktok.com/@desihub',
   },
 

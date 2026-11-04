@@ -10,31 +10,45 @@ interface FloatingButtonsProps {
 }
 
 export default function WhatsAppButton({ initialInstagramUrl }: FloatingButtonsProps) {
+  // Initialize with server-provided initial value, without hardcoded URL fallbacks
   const [instagramUrl, setInstagramUrl] = useState<string>(
-    initialInstagramUrl || config.social.instagram || ''
+    (initialInstagramUrl || '').trim()
   );
 
+  // Sync state if server prop updates
+  useEffect(() => {
+    if (initialInstagramUrl !== undefined) {
+      setInstagramUrl(initialInstagramUrl.trim());
+    }
+  }, [initialInstagramUrl]);
+
+  // Client-side fetch from Supabase to guarantee real-time synchronization with settings
   useEffect(() => {
     const supabase = createClient();
+
     async function loadSettings() {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('settings')
           .select('key, value')
           .in('key', ['instagram_url', 'instagram']);
 
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           const map: Record<string, string> = {};
           data.forEach((r) => {
-            if (r.key && r.value) map[r.key] = r.value.trim();
+            if (r.key) {
+              map[r.key] = (r.value || '').trim();
+            }
           });
-          const liveInsta = map.instagram_url || map.instagram || '';
+          // Bind directly to dynamic instagram_url, fallback to legacy instagram key
+          const liveInsta = map.instagram_url ?? map.instagram ?? '';
           setInstagramUrl(liveInsta);
         }
       } catch (err) {
         console.warn('Could not load instagram_url in floating buttons:', err);
       }
     }
+
     loadSettings();
   }, []);
 
@@ -45,8 +59,8 @@ export default function WhatsAppButton({ initialInstagramUrl }: FloatingButtonsP
         bottom: 'max(6rem, calc(5.5rem + env(safe-area-inset-bottom, 0px)))',
       }}
     >
-      {/* 1. Floating Instagram Button (Only rendered if instagram_url is non-empty) */}
-      {instagramUrl && (
+      {/* 1. Floating Instagram Button (Bound directly to instagram_url; hidden if empty) */}
+      {instagramUrl && instagramUrl !== '#' ? (
         <a
           href={instagramUrl}
           target="_blank"
@@ -60,7 +74,7 @@ export default function WhatsAppButton({ initialInstagramUrl }: FloatingButtonsP
         >
           <FaInstagram size={28} className="text-white" />
         </a>
-      )}
+      ) : null}
 
       {/* 2. Floating WhatsApp Button */}
       <a
